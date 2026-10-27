@@ -3,6 +3,7 @@ package com.carbon.modules.connector.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.carbon.common.core.domain.PageQuery;
 import com.carbon.modules.connector.domain.bo.ConnectorBo;
+import com.carbon.modules.connector.domain.bo.ConnectorCopyBo;
 import com.carbon.modules.connector.domain.entity.Connector;
 import com.carbon.modules.connector.domain.entity.ConnectorAuth;
 import com.carbon.modules.connector.domain.entity.ConnectorOperation;
@@ -36,6 +37,17 @@ public interface IConnectorService {
     Long create(ConnectorBo bo);
 
     void update(Long id, ConnectorBo bo);
+
+    /**
+     * 复制连接器（含鉴权与接口）。
+     *
+     * <p>副本**一律以停用状态落地**，即使源连接器是启用的：它拿着同一套三方密钥，
+     * 一创建就能被网关调到，等于「复制一下就多了一个生产入口」。
+     *
+     * @param bo 可空；code/name 留空由服务端推导（`<原编码>-copy`、`<原名> 副本`）
+     * @return 新连接器 id
+     */
+    Long copy(Long id, ConnectorCopyBo bo);
 
     /** 真删（表上无 deleted 列），连带删掉鉴权与接口 */
     void delete(List<Long> ids);

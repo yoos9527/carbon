@@ -10,6 +10,7 @@ import com.carbon.common.encrypt.CryptoService;
 import com.carbon.common.json.JsonUtils;
 import com.carbon.framework.expression.TemplateRenderer;
 import com.carbon.modules.connector.domain.bo.ConnectorBo;
+import com.carbon.modules.connector.domain.bo.ConnectorCopyBo;
 import com.carbon.modules.connector.domain.entity.Connector;
 import com.carbon.modules.connector.domain.entity.ConnectorAuth;
 import com.carbon.modules.connector.domain.entity.ConnectorOperation;
@@ -137,6 +138,106 @@ public class ConnectorServiceImpl implements IConnectorService {
         // 鉴权可能变了：让运行时丢掉缓存里的 token（否则改完密钥还要等最长 1 小时才生效）
         events.publishEvent(ConnectorAuthChangedEvent.of(id));
         log.info("连接器更新成功 id={} code={}", id, entity.getCode());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long copy(Long id, ConnectorCopyBo bo) {
+        Connector source = requireById(id);
+        ConnectorCopyBo req = bo == null ? new ConnectorCopyBo() : bo;
+
+        String code = req.getCode() == null || req.getCode().isBlank()
+                ? nextCopyCode(source.getCode())
+                : req.getCode().trim().toLowerCase();
+        assertCodeAvailable(code, null);
+
+        Connector target = new Connector();
+        target.setCode(code);
+        target.setName(req.getName() == null || req.getName().isBlank()
+                ? truncate(source.getName() + " 副本", 64) : req.getName().trim());
+        target.setCategory(source.getCategory());
+        target.setBaseUrl(source.getBaseUrl());
+        target.setDefaultHeaders(source.getDefaultHeaders());
+        target.setTimeoutMs(source.getTimeoutMs());
+        target.setRetry(source.getRetry());
+        // 副本一律以停用状态落地：它拿着同一套三方密钥，一创建就能被网关调到，
+        // 等于“复制一下就多了一个生产入口”。要求人先确认基址/环境再启用。
+        target.setStatus(0);
+        target.setRemark(source.getRemark());
+        connectorMapper.insert(target);
+
+        ConnectorAuth sourceAuth = findAuth(id);
+        if (sourceAuth != null && sourceAuth.getConfig() != null) {
+            // 直接携密文，不解密：同一部署下 CARBON_MASTER_KEY 是同一把，
+            // 解密再加密只是多一次可能失败的机会（旧数据里还有明文 config）。
+            ConnectorAuth auth = new ConnectorAuth();
+            auth.setConnectorId(target.getId());
+            auth.setAuthType(sourceAuth.getAuthType());
+            auth.setConfig(sourceAuth.getConfig());
+            auth.setStatus(sourceAuth.getStatus() == null ? 1 : sourceAuth.getStatus());
+            authMapper.insert(auth);
+        }
+
+        int copied = 0;
+        if (req.copyOperations()) {
+            List<ConnectorOperation> operations = operationMapper.selectList(
+                    new LambdaQueryWrapper<ConnectorOperation>()
+                            .eq(ConnectorOperation::getConnectorId, id)
+                            .orderByAsc(ConnectorOperation::getCreatedAt));
+            for (ConnectorOperation source2 : operations) {
+                ConnectorOperation op = new ConnectorOperation();
+                op.setConnectorId(target.getId());
+                op.setCode(source2.getCode());
+                op.setName(source2.getName());
+                op.setMethod(source2.getMethod());
+                op.setPath(source2.getPath());
+                op.setQueryParams(source2.getQueryParams());
+                op.setHeaders(source2.getHeaders());
+                op.setBodyType(source2.getBodyType());
+                op.setBodyTemplate(source2.getBodyTemplate());
+                op.setResponseExtract(source2.getResponseExtract());
+                op.setPreScript(source2.getPreScript());
+                op.setPostScript(source2.getPostScript());
+                op.setScriptTimeoutMs(source2.getScriptTimeoutMs());
+                op.setTimeoutMs(source2.getTimeoutMs());
+                op.setRetry(source2.getRetry());
+                op.setStatus(source2.getStatus());
+                operationMapper.insert(op);
+                copied++;
+            }
+        }
+        log.info("连接器复制成功 {} -> {}（接口 {} 个）", source.getCode(), code, copied);
+        return target.getId();
+    }
+
+    /**
+     * 推导一个可用的副本编码：`-copy`、`-copy2`、`-copy3`…
+     *
+     * <p>后缀算在 64 位长度限制内，所以先把原编码裁到放得下后缀的长度——
+     * 否则一个 64 位编码的连接器永远复制不了（拼接后超长，报的错还很难懂）。
+     */
+    private String nextCopyCode(String base) {
+        for (int i = 1; i <= 99; i++) {
+            String suffix = i == 1 ? "-copy" : "-copy" + i;
+            String candidate = truncate(base, 64 - suffix.length()) + suffix;
+            if (candidate.length() < 2) {
+                candidate = "copy" + suffix;
+            }
+            if (RESERVED_GATEWAY_CODES.contains(candidate)) {
+                continue;
+            }
+            if (!connectorMapper.exists(new LambdaQueryWrapper<Connector>().eq(Connector::getCode, candidate))) {
+                return candidate;
+            }
+        }
+        throw ServiceException.param("复制失败：从 " + base + " 派生的编码都被占用了，请直接指定 code");
+    }
+
+    private static String truncate(String text, int max) {
+        if (text == null) {
+            return null;
+        }
+        return text.length() <= max ? text : text.substring(0, max);
     }
 
     @Override

@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import {
   AUTH_TYPES,
   authTypeLabel,
+  copyConnector,
   createConnector,
   deleteConnectors,
   pageConnectors,
@@ -75,6 +76,26 @@ async function toggleStatus(row: Connector) {
     ElMessage.success(next === 1 ? "已启用" : "已停用");
   } catch (e) {
     row.status = prev;
+    showError(e);
+  }
+}
+
+async function copy(row: Connector) {
+  const count = row.operationCount ?? 0;
+  try {
+    await ElMessageBox.confirm(
+      `会连同鉴权配置${count > 0 ? `与 ${count} 个接口` : ""}一起复制，副本以「停用」状态创建（改完基址/环境再启用）。继续？`,
+      `复制「${row.name}」`,
+      { type: "info", confirmButtonText: "复制", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await copyConnector(row.id);
+    ElMessage.success("已复制，副本处于停用状态");
+    load();
+  } catch (e) {
     showError(e);
   }
 }
@@ -215,7 +236,7 @@ onMounted(load);
         </template>
       </el-table-column>
       <el-table-column prop="updatedAt" label="更新时间" width="180" />
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
           <el-button
             link
@@ -224,6 +245,7 @@ onMounted(load);
           >
             接口
           </el-button>
+          <el-button link type="primary" @click="copy(row)">复制</el-button>
           <el-button link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>

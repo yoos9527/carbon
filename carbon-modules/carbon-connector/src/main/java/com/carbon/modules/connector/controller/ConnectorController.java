@@ -6,6 +6,7 @@ import com.carbon.common.core.domain.R;
 import com.carbon.common.core.domain.TableDataInfo;
 import com.carbon.common.web.domain.BaseController;
 import com.carbon.modules.connector.domain.bo.ConnectorBo;
+import com.carbon.modules.connector.domain.bo.ConnectorCopyBo;
 import com.carbon.modules.connector.domain.vo.ConnectorVo;
 import com.carbon.modules.connector.service.IConnectorService;
 import jakarta.validation.Valid;
@@ -61,6 +62,13 @@ public class ConnectorController extends BaseController {
     @PostMapping
     public R<Long> create(@Valid @RequestBody ConnectorBo bo) {
         return R.ok(connectorService.create(bo));
+    }
+
+    /** 复制连接器：body 可空（`{}` / 不传），code 与 name 留空则自动推导 */
+    @PostMapping("/{id}/copy")
+    public R<Long> copy(@PathVariable Long id,
+                        @Valid @RequestBody(required = false) ConnectorCopyBo bo) {
+        return R.ok(connectorService.copy(id, bo));
     }
 
     @PutMapping("/{id}")

@@ -69,6 +69,19 @@ export function updateConnector(id: string, body: Partial<Connector>) {
 }
 
 /** 启停用：后端是 query 参数 status，不是 body */
+/**
+ * 复制连接器（含鉴权与接口）。
+ *
+ * 副本一律以**停用**状态落地：它拿着同一套三方密钥，一创建就能被网关调到，
+ * 等于「复制一下就多了一个生产入口」。空 body 时由后端推导 `<原编码>-copy`。
+ */
+export function copyConnector(
+  id: string,
+  body: { code?: string; name?: string; withOperations?: boolean } = {}
+) {
+  return http.post<string>(`/connectors/${id}/copy`, body);
+}
+
 export function updateConnectorStatus(id: string, status: number) {
   return http.put<void>(`/connectors/${id}/status`, undefined, {
     params: { status }
