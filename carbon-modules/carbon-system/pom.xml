@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.carbon</groupId>
+        <artifactId>carbon-modules</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>carbon-system</artifactId>
+
+    <name>carbon-system</name>
+    <description>系统域：sys_config 等平台自身配置。本轮不做登录鉴权（见设计文档 §9.6 迁移路径）。</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-mybatis</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

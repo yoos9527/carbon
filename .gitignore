@@ -47,3 +47,6 @@ Thumbs.db
 .env.local
 *.pem
 *.p12
+
+# ---- 本机私有覆盖（含本地口令，绝不入库）----
+**/application-local-private.yml

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.carbon</groupId>
+        <artifactId>carbon</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>carbon-common</artifactId>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>carbon-common-bom</module>
+        <module>carbon-common-core</module>
+        <module>carbon-common-web</module>
+        <module>carbon-common-mybatis</module>
+        <module>carbon-common-redis</module>
+        <module>carbon-common-json</module>
+        <module>carbon-common-doc</module>
+        <module>carbon-common-encrypt</module>
+        <module>carbon-common-sensitive</module>
+        <module>carbon-common-log</module>
+        <module>carbon-common-sse</module>
+        <module>carbon-common-idempotent</module>
+    </modules>
+</project>

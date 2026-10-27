@@ -1,0 +1,35 @@
+# 本地开发环境：依赖由 script/docker/docker-compose.yml 提供
+#   MySQL  127.0.0.1:3307  (root/carbon, db=carbon)
+#   Redis  127.0.0.1:6379  (复用宿主机，使用 db 15)
+#
+# 本机专有口令（如 Redis 密码）放在 application-local-private.yml，该文件已被 .gitignore 排除。
+spring:
+  config:
+    import: optional:classpath:application-local-private.yml
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3307/carbon?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: carbon
+    hikari:
+      pool-name: carbon-hikari
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 15
+      password: ${REDIS_PASSWORD:}
+      timeout: 3s
+
+logging:
+  level:
+    com.carbon: debug
+  file:
+    name: logs/carbon.log
