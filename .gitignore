@@ -1,0 +1,49 @@
+# ---- Java / Maven ----
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.class
+*.jar
+*.war
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.properties.bak
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+*.launch
+
+# ---- Node / 前端 ----
+node_modules/
+dist/
+dist-ssr/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- 运行时产物 ----
+logs/
+*.log
+*.pid
+*.hprof
+heapdump.*
+/data/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+
+# ---- 本地私有配置（含密钥，绝不入库）----
+.env
+.env.local
+*.pem
+*.p12

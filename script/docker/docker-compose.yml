@@ -1,0 +1,58 @@
+# Carbon 本地开发依赖
+#
+# 默认只起 MySQL（Redis 默认复用宿主机 6379）。
+# 若宿主机没有 Redis：docker compose --profile with-redis up -d
+#
+# 用法（在仓库根目录）：
+#   docker compose -f script/docker/docker-compose.yml up -d
+#   docker compose -f script/docker/docker-compose.yml down          # 保留数据
+#   docker compose -f script/docker/docker-compose.yml down -v       # 连数据一起删
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: carbon-mysql
+    restart: unless-stopped
+    # 宿主 3307 → 容器 3306，避免与将来宿主机自装的 MySQL 冲突
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: carbon
+      MYSQL_DATABASE: carbon
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --lower-case-table-names=0
+      - --max-connections=500
+      - --innodb-buffer-pool-size=512M
+    volumes:
+      - carbon-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pcarbon"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  # 仅在 --profile with-redis 下启动
+  redis:
+    profiles: ["with-redis"]
+    image: redis:7.4-alpine
+    container_name: carbon-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - carbon-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  carbon-mysql-data:
+  carbon-redis-data:
