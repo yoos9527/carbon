@@ -94,10 +94,7 @@ export function getOperation(connectorId: string, id: string) {
   return http.get<Operation>(`/connectors/${connectorId}/operations/${id}`);
 }
 
-export function createOperation(
-  connectorId: string,
-  body: Partial<Operation>
-) {
+export function createOperation(connectorId: string, body: Partial<Operation>) {
   return http.post<string>(`/connectors/${connectorId}/operations`, body);
 }
 

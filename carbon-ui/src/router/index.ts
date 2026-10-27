@@ -115,7 +115,10 @@ router.beforeEach((to, _from, next) => {
     }
   }
 
-  const externalLink = isOneOfArray(to?.name as string, ["http", "https"]);
+  // 外链路由的 name 就是 URL（http/https 开头），这类不覆盖 document.title
+  const externalLink = ["http", "https"].some(p =>
+    String(to?.name ?? "").startsWith(p)
+  );
   if (!externalLink) {
     to.matched.some(item => {
       if (!item.meta.title) return "";
