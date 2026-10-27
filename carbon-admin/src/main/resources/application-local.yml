@@ -2,7 +2,12 @@
 #   MySQL  127.0.0.1:3307  (root/carbon, db=carbon)
 #   Redis  127.0.0.1:6379  (复用宿主机，使用 db 15)
 #
-# 本机专有口令（如 Redis 密码）放在 application-local-private.yml，该文件已被 .gitignore 排除。
+# **连接信息直接写在这里并入库**，目的是 clone 下来就能跑（`./mvnw -pl carbon-admin -am spring-boot:run`），
+# 不需要先配一堆环境变量。这里全是**本机开发用的明文口令**，与 docker-compose 里的一致，
+# 泄漏了也只能打开你自己的开发库——生产环境走 application-prod.yml，那里没有任何默认值，缺变量即启动失败。
+#
+# 需要偏离默认值时（换端口/换库/换口令），改 application-local-private.yml（已被 .gitignore 排除），
+# 那里优先级更高，不会污染这份公共配置。
 spring:
   config:
     import: optional:classpath:application-local-private.yml
@@ -25,8 +30,24 @@ spring:
       host: 127.0.0.1
       port: 6379
       database: 15
-      password: ${REDIS_PASSWORD:}
+      # 宿主机 Redis 的口令；本机如果没设口令，这两个写法等价（空串即无密码）。
+      # 用 compose 里的那台（--profile with-redis，宿主 6380、无口令）时在 private 文件里覆盖。
+      password: ${REDIS_PASSWORD:P4JmoV01zq6yaJ9UCvxBaJ4z}
       timeout: 3s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+
+# 凭证加密的主密钥（32 字节 base64）。AES-256-GCM，`connector_auth.config` 里的 ENC:v1: 密文靠它解。
+# 本地用这把固定假钥，好处是重启/重装后旧密文还能解开；生产必须换成真实随机值（openssl rand -base64 32）。
+# 换钥 = 库里旧密文全部解不开，要重新录一遍凭证。
+carbon:
+  crypto:
+    master-key: ${CARBON_MASTER_KEY:2f8Kq3mZ0aW9sV1yB4cD6eF7gH8iJ9kL0mN1oP2qR3s=}
 
 logging:
   level:
