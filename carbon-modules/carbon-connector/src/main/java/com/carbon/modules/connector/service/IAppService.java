@@ -33,6 +33,19 @@ public interface IAppService {
      */
     Map<String, Object> rotateSecret(Long id);
 
+    /**
+     * 更新应用的可编辑字段：名称、连接器白名单、QPS、IP 白名单。
+     *
+     * <p>**改不了 appKey**：它是调用方已经写进配置、监控、日志检索里的东西，
+     * 平台侧「顺手」换一个只会让接入方半夜排查 401。换 key 的正确做法是新建应用 + 停用旧的。
+     * 也**改不了 secret**——那是 {@link #rotateSecret} 的事，且只在生成时明文返回一次。
+     *
+     * @param allowedConnectors {@code null}/空 = 不限制（语义同创建时）
+     * @param ipWhitelist       {@code null}/空 = 不限制；元素须是 IP 或 CIDR
+     */
+    void update(Long id, String name, List<Long> allowedConnectors, Integer rateLimitQps,
+                List<String> ipWhitelist);
+
     void updateStatus(Long id, Integer status);
 
     void delete(Long id);

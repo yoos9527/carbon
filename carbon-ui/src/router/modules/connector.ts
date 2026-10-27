@@ -27,6 +27,14 @@ export default {
       }
     },
     {
+      path: "/apps",
+      name: "AppList",
+      component: () => import("@/views/app/index.vue"),
+      meta: {
+        title: "调用方应用"
+      }
+    },
+    {
       path: "/connectors/:id/operations",
       name: "ConnectorOperations",
       component: () => import("@/views/connector/operations.vue"),

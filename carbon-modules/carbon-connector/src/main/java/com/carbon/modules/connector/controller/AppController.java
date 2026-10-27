@@ -18,7 +18,9 @@ import java.util.Map;
  * 调用方应用管理。
  *
  * <p>没有 GET /{id} 这个接口：密钥只在创建/重置时返回一次，之后单查一个应用能看到的
- * 与列表里那一行完全相同，多一个接口只会多一处泄漏面。
+ * 与列表里那一行完全相同，多一个接口只会多一处泄漏面。**但 PUT /{id} 是必须的**——
+ * 白名单与 QPS 是运营期会变的东西（新接一个连接器、限流调大一倍），
+ * 没有它就只能「删了重建」，而重建会换掉 appKey，接入方全得改配置。
  *
  * @author carbon
  */
@@ -47,6 +49,23 @@ public class AppController {
                 asLongList(body.get("allowedConnectors")),
                 body.get("rateLimitQps") == null ? null : Integer.valueOf(String.valueOf(body.get("rateLimitQps"))),
                 asStringList(body.get("ipWhitelist"))));
+    }
+
+    /**
+     * 更新名称 / 连接器白名单 / QPS / IP 白名单。
+     *
+     * <p>字段语义：{@code allowedConnectors}、{@code ipWhitelist} 传 {@code null} 表示不动，
+     * 传空数组表示「清空 = 不限制」；{@code rateLimitQps} 传 {@code null} 表示不动。
+     */
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        appService.update(id,
+                asString(body.get("name")),
+                body.containsKey("allowedConnectors") ? asLongList(body.get("allowedConnectors")) : null,
+                body.get("rateLimitQps") == null
+                        ? null : Integer.valueOf(String.valueOf(body.get("rateLimitQps"))),
+                body.containsKey("ipWhitelist") ? asStringList(body.get("ipWhitelist")) : null);
+        return R.ok();
     }
 
     @PutMapping("/{id}/secret")

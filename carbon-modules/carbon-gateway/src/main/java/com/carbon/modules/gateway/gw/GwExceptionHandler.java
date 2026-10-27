@@ -1,6 +1,7 @@
 package com.carbon.modules.gateway.gw;
 
 import com.carbon.common.core.exception.ServiceException;
+import com.carbon.framework.expression.RenderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -40,6 +41,17 @@ public class GwExceptionHandler {
     @ExceptionHandler(ServiceException.class)
     public ResponseEntity<GwResult<Void>> handleService(ServiceException e) {
         return fail(GwErrorCode.from(e.error()), e.getMessage());
+    }
+
+    @ExceptionHandler(RenderException.class)
+    public ResponseEntity<GwResult<Void>> handleRender(RenderException e) {
+        // 模板渲染失败多半是调用方少传了 input 里的字段，属于它的错，不该回 5000
+        // （5000 会让接入方去查平台日志，而这其实是它自己的请求不完整）。
+        if (RenderException.PARAM_INVALID.equals(e.getCode())) {
+            return fail(GwErrorCode.PARAM_INVALID, e.getMessage());
+        }
+        log.error("网关调用异常", e);
+        return fail(GwErrorCode.INTERNAL_ERROR, null);
     }
 
     @ExceptionHandler(RuntimeException.class)
