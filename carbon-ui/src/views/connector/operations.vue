@@ -113,8 +113,12 @@ onMounted(() => {
 <template>
   <div class="p-4">
     <el-breadcrumb class="mb-3" separator="/">
-      <el-breadcrumb-item :to="{ path: '/connectors' }">连接器</el-breadcrumb-item>
-      <el-breadcrumb-item>{{ connector?.name || connectorId }}</el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: '/connectors' }"
+        >连接器</el-breadcrumb-item
+      >
+      <el-breadcrumb-item>{{
+        connector?.name || connectorId
+      }}</el-breadcrumb-item>
     </el-breadcrumb>
 
     <el-descriptions v-if="connector" :column="3" border class="mb-4">
@@ -159,7 +163,11 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="方法" width="90">
         <template #default="{ row }">
-          <el-tag size="small" effect="dark" :type="row.method === 'GET' ? 'success' : 'warning'">
+          <el-tag
+            size="small"
+            effect="dark"
+            :type="row.method === 'GET' ? 'success' : 'warning'"
+          >
             {{ row.method }}
           </el-tag>
         </template>
@@ -171,7 +179,9 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDebug(row)">试调</el-button>
+          <el-button link type="primary" @click="openDebug(row)"
+            >试调</el-button
+          >
         </template>
       </el-table-column>
       <template #empty>
@@ -221,7 +231,9 @@ onMounted(() => {
             <el-alert
               v-if="debug.error"
               :title="`${debug.error.code} · ${debug.error.message}`"
-              :description="debug.error.traceId ? `traceId: ${debug.error.traceId}` : ''"
+              :description="
+                debug.error.traceId ? `traceId: ${debug.error.traceId}` : ''
+              "
               type="error"
               :closable="false"
               show-icon
@@ -229,7 +241,8 @@ onMounted(() => {
             <pre
               v-else-if="debug.result"
               class="max-h-72 overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-gray-800"
-            >{{ pretty(debug.result) }}</pre>
+              >{{ pretty(debug.result) }}</pre
+            >
             <div v-else class="text-xs text-gray-400">还没有发送</div>
             <div v-if="debug.result" class="mt-1 text-xs text-gray-400">
               总耗时 {{ debug.costMs }} ms

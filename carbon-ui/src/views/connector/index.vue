@@ -217,7 +217,11 @@ onMounted(load);
       <el-table-column prop="updatedAt" label="更新时间" width="180" />
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="router.push(`/connectors/${row.id}/operations`)">
+          <el-button
+            link
+            type="primary"
+            @click="router.push(`/connectors/${row.id}/operations`)"
+          >
             接口
           </el-button>
           <el-button link type="danger" @click="remove(row)">删除</el-button>
@@ -276,7 +280,8 @@ onMounted(load);
             />
           </el-select>
           <div class="mt-1 text-xs text-gray-400">
-            鉴权参数（API Key/密码等）保存后在详情页配置，密钥入库加密、只回显掩码
+            鉴权参数（API
+            Key/密码等）保存后在详情页配置，密钥入库加密、只回显掩码
           </div>
         </el-form-item>
         <el-form-item label="超时(ms)">
