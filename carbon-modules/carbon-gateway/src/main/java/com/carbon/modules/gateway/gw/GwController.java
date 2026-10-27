@@ -6,6 +6,7 @@ import com.carbon.framework.http.HttpResult;
 import com.carbon.modules.connector.domain.entity.Connector;
 import com.carbon.modules.connector.service.IAppService;
 import com.carbon.modules.connector.service.IConnectorService;
+import com.carbon.modules.invokelog.api.InvokeLogEvent;
 import com.carbon.modules.engine.invoke.InvokeRequest;
 import com.carbon.modules.engine.invoke.InvokeResult;
 import com.carbon.modules.engine.invoke.InvokeService;
@@ -131,7 +132,8 @@ public class GwController {
         try {
             InvokeResult result = invokeService.invoke(new InvokeRequest(
                     connectorCode, operationCode, input,
-                    request.getHeader(HEADER_ENV), Map.of(), false));
+                    request.getHeader(HEADER_ENV), Map.of(), false,
+                    InvokeLogEvent.SOURCE_GATEWAY, credential.app().getId()));
             return ResponseEntity.ok(GwResult.ok(result.extracted(), traceId,
                     result.status(), System.currentTimeMillis() - startedAt));
         } catch (ServiceException e) {

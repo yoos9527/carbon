@@ -11,6 +11,8 @@ import java.util.Map;
  * @param envCode       目标环境；{@code null} 表示默认环境
  * @param headerOverrides 临时覆盖的请求头（试调面板专用，不落库）
  * @param dryRun        {@code true} 时只渲染并回显将发出的请求，不真正调用三方
+ * @param source        来源标记（{@code CONSOLE}/{@code GW}/{@code FLOW}），只用于写日志
+ * @param appId         调用方应用 id（仅网关有），只用于写日志
  * @author carbon
  */
 public record InvokeRequest(String connectorCode,
@@ -18,7 +20,9 @@ public record InvokeRequest(String connectorCode,
                             Map<String, Object> input,
                             String envCode,
                             Map<String, String> headerOverrides,
-                            boolean dryRun) {
+                            boolean dryRun,
+                            String source,
+                            Long appId) {
 
     public InvokeRequest {
         input = input == null ? Map.of() : Map.copyOf(input);

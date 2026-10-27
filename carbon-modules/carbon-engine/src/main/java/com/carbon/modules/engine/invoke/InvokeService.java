@@ -1,5 +1,8 @@
 package com.carbon.modules.engine.invoke;
 
+import com.carbon.modules.invokelog.api.InvokeLogEvent;
+import com.carbon.modules.invokelog.api.InvokeLogSink;
+
 import com.carbon.common.core.enums.BizError;
 import com.carbon.common.core.exception.ServiceException;
 import com.carbon.common.json.JsonUtils;
@@ -71,30 +74,54 @@ public class InvokeService {
     private final HttpExecutor httpExecutor;
     private final GroovySandbox groovySandbox;
     private final AuthResolver authResolver;
+    /** 日志落库是旁路：没有实现（单测、纯引擎部署）就是空列表，不写条件分支 */
+    private final List<InvokeLogSink> logSinks;
 
     public InvokeService(IConnectorService connectorService,
                          IEnvService envService,
                          TemplateRenderer templateRenderer,
                          HttpExecutor httpExecutor,
                          GroovySandbox groovySandbox,
-                         AuthResolver authResolver) {
+                         AuthResolver authResolver,
+                         List<InvokeLogSink> logSinks) {
         this.connectorService = connectorService;
         this.envService = envService;
         this.templateRenderer = templateRenderer;
         this.httpExecutor = httpExecutor;
         this.groovySandbox = groovySandbox;
         this.authResolver = authResolver;
+        this.logSinks = logSinks == null ? List.of() : List.copyOf(logSinks);
     }
 
+    /**
+     * 执行一次调用。
+     *
+     * <p>日志在 {@code finally} 里写：失败路径占这类平台的绝大多数问题单，
+     * 「只记成功」的日志等于没有日志。这里刻意不在 catch 里 return 包装结果——
+     * 失败必须原样抛出，让调用方（试调面板 / 网关）自己决定怎么表达错误。
+     */
     public InvokeResult invoke(InvokeRequest request) {
         String traceId = newTraceId();
         long startNanos = System.nanoTime();
+        LogDraft draft = new LogDraft(request.source(), request.appId());
+        try {
+            return run(request, traceId, startNanos, draft);
+        } catch (RuntimeException e) {
+            draft.fail(e);
+            throw e;
+        } finally {
+            emitLog(traceId, startNanos, draft);
+        }
+    }
 
+    private InvokeResult run(InvokeRequest request, String traceId, long startNanos, LogDraft draft) {
         Connector connector = connectorService.requireByCode(request.connectorCode());
+        draft.connectorId = connector.getId();
         if (connector.getStatus() == null || connector.getStatus() != 1) {
             throw ServiceException.param("连接器已停用：" + connector.getCode());
         }
         ConnectorOperation operation = connectorService.requireOperation(connector.getId(), request.operationCode());
+        draft.operationId = operation.getId();
         if (operation.getStatus() != null && operation.getStatus() != 1) {
             throw ServiceException.param("接口已停用：" + operation.getCode());
         }
@@ -132,11 +159,16 @@ public class InvokeService {
         Map<String, String> headers = buildHeaders(connector, operation, renderContext, authOutcome, request);
         String body = buildBody(operation, renderContext);
 
+        draft.method = operation.getMethod().toUpperCase();
         InvokeResult.SentRequest sent = new InvokeResult.SentRequest(
                 operation.getMethod().toUpperCase(),
                 MaskingUtils.maskUrl(url),
                 MaskingUtils.maskHeaders(headers, authOutcome.sensitiveKeys()),
                 MaskingUtils.maskJson(body));
+
+        draft.realUrl = sent.url();
+        draft.reqHeaders = sent.headers();
+        draft.reqBody = sent.body();
 
         if (request.dryRun()) {
             return new InvokeResult(traceId, true, null, null, sent, null, null, false,
@@ -160,9 +192,13 @@ public class InvokeService {
                 "body", safeParse(result.getBody())));
         runScript(operation.getPostScript(), ctx, traceId, operation.getScriptTimeoutMs());
 
+        draft.respStatus = result.getStatus();
+        draft.respBody = truncate(MaskingUtils.maskJson(result.getBody()));
+        draft.truncated = result.isTruncated();
+
         if (result.getStatus() / 100 != 2) {
             BizError error = result.getStatus() >= 500 ? BizError.PROVIDER_HTTP_5XX : BizError.PROVIDER_HTTP_4XX;
-            String maskedBody = truncate(MaskingUtils.maskJson(result.getBody()));
+            String maskedBody = draft.respBody;
             throw ServiceException.of(error, "三方返回 HTTP " + result.getStatus() + "：" + maskedBody);
         }
 
@@ -175,6 +211,70 @@ public class InvokeService {
 
         return new InvokeResult(traceId, true, null, null, sent, result.getStatus(),
                 truncate(result.getBody()), result.isTruncated(), extracted, duration);
+    }
+
+    // ------------------------------------------------------------------ 日志
+
+    private void emitLog(String traceId, long startNanos, LogDraft draft) {
+        if (logSinks.isEmpty()) {
+            return;
+        }
+        try {
+            InvokeLogEvent event = new InvokeLogEvent(traceId, draft.source, draft.appId, null,
+                    draft.connectorId, draft.operationId, draft.method, draft.realUrl,
+                    draft.reqHeaders, draft.reqBody, draft.respStatus, draft.respBody,
+                    draft.truncated, elapsedMs(startNanos), draft.errCode, draft.errMsg);
+            for (InvokeLogSink sink : logSinks) {
+                sink.record(event);
+            }
+        } catch (RuntimeException e) {
+            // 审计旁路自己出问题，不能影响已经成功的业务调用
+            log.warn("写调用日志失败 traceId={} cause={}", traceId, e.toString());
+        }
+    }
+
+    /**
+     * 日志要用的可变中间态。
+     *
+     * <p>用一个可变的 draft 而不是把 12 个值从 {@code run()} 里一路 return 回来：
+     * 失败时这些值拿不到返回值，只能靠 draft 带出来。
+     */
+    private static final class LogDraft {
+        private final String source;
+        private final Long appId;
+        private Long connectorId;
+        private Long operationId;
+        private String method;
+        private String realUrl;
+        private Map<String, String> reqHeaders;
+        private String reqBody;
+        private Integer respStatus;
+        private String respBody;
+        private boolean truncated;
+        private String errCode;
+        private String errMsg;
+
+        private LogDraft(String source, Long appId) {
+            this.source = source == null ? InvokeLogEvent.SOURCE_CONSOLE : source;
+            this.appId = appId;
+        }
+
+        private void fail(RuntimeException e) {
+            if (e instanceof ServiceException se) {
+                this.errCode = se.error().name();
+            } else {
+                this.errCode = BizError.INTERNAL_ERROR.name();
+            }
+            this.errMsg = truncateForLog(e.getMessage(), 900);
+        }
+    }
+
+    /** 错误消息截到 900 字符：{@code err_msg} 列是 VARCHAR(1024)，按字符留余量，别让 DB 抛截断错 */
+    private static String truncateForLog(String text, int max) {
+        if (text == null) {
+            return null;
+        }
+        return text.length() <= max ? text : text.substring(0, max) + "...";
     }
 
     // ------------------------------------------------------------------ 渲染

@@ -1,5 +1,7 @@
 package com.carbon.modules.engine.invoke;
 
+import com.carbon.modules.invokelog.api.InvokeLogEvent;
+
 import com.carbon.common.core.domain.R;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,7 +52,9 @@ public class InvokeController {
                 asMap(payload.get("input")),
                 envCode,
                 asStringMap(payload.get("headerOverrides")),
-                dryRun);
+                dryRun,
+                InvokeLogEvent.SOURCE_CONSOLE,
+                null);
         return R.ok(invokeService.invoke(request));
     }
 
