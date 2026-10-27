@@ -38,7 +38,12 @@ export class ApiError extends Error {
   /** 三方返回的 HTTP 状态（PROVIDER_HTTP_4XX 等场景有用） */
   providerStatus?: number;
 
-  constructor(message: string, code: number, traceId?: string, providerStatus?: number) {
+  constructor(
+    message: string,
+    code: number,
+    traceId?: string,
+    providerStatus?: number
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
@@ -73,7 +78,9 @@ class HttpClient {
     });
 
     this.instance.interceptors.response.use(
-      response => {
+      // 这里故意返回**已解开包装**的 data，类型上就是 AxiosResponse，只能放宽成 any：
+      // 拦截器把响应体换成了业务数据，`http.get<T>` 的 T 才是真正的返回类型。
+      (response): any => {
         const body = response.data as R;
         // 非包装响应（比如 actuator/health）原样返回
         if (body == null || typeof body !== "object" || !("code" in body)) {
@@ -81,7 +88,9 @@ class HttpClient {
         }
         if (body.code === 200) return body.data;
         const traceId =
-          response.headers["x-trace-id"] ?? (body.data as any)?.traceId ?? undefined;
+          response.headers["x-trace-id"] ??
+          (body.data as any)?.traceId ??
+          undefined;
         throw new ApiError(body.msg || "请求失败", body.code, traceId);
       },
       error => {
@@ -95,7 +104,9 @@ class HttpClient {
           message = "请求超时：后端未在 60 秒内响应";
         }
         if (code === 429) message = `触发限流：${message}`;
-        return Promise.reject(new ApiError(message, code, traceId, providerStatus));
+        return Promise.reject(
+          new ApiError(message, code, traceId, providerStatus)
+        );
       }
     );
   }
@@ -108,11 +119,19 @@ class HttpClient {
     return this.request<T>({ ...config, url, method: "get" });
   }
 
-  post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  post<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
     return this.request<T>({ ...config, url, method: "post", data });
   }
 
-  put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  put<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
     return this.request<T>({ ...config, url, method: "put", data });
   }
 
@@ -131,8 +150,12 @@ let lastMessage = "";
 let lastAt = 0;
 export function showError(e: unknown): ApiError {
   const err =
-    e instanceof ApiError ? e : new ApiError((e as Error)?.message ?? "未知错误", -1);
-  const text = err.traceId ? `${err.message}（traceId: ${err.traceId}）` : err.message;
+    e instanceof ApiError
+      ? e
+      : new ApiError((e as Error)?.message ?? "未知错误", -1);
+  const text = err.traceId
+    ? `${err.message}（traceId: ${err.traceId}）`
+    : err.message;
   const now = Date.now();
   if (text !== lastMessage || now - lastAt > 2000) {
     ElMessage.error({ message: text, grouping: true });
