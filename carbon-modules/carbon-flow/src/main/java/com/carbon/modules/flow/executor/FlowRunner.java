@@ -17,7 +17,7 @@ import com.carbon.modules.flow.mapper.FlowMapper;
 import com.carbon.modules.flow.mapper.FlowRunMapper;
 import com.carbon.modules.flow.mapper.FlowStepRunMapper;
 import com.carbon.modules.flow.mapper.FlowVersionMapper;
-import com.carbon.modules.flow.stream.RunStreamRegistry;
+import com.carbon.common.sse.SseStreamRegistry;
 import com.carbon.modules.flow.support.FlowDsls;
 import com.carbon.modules.flow.support.NodeTypes;
 import com.yomahub.liteflow.core.FlowExecutor;
@@ -57,12 +57,12 @@ public class FlowRunner {
     private final FlowStepRunMapper stepMapper;
     private final FlowExecutor liteFlowExecutor;
     private final FlowNodeHandlerRefs handlers;
-    private final RunStreamRegistry stream;
+    private final SseStreamRegistry stream;
 
     public FlowRunner(FlowMapper flowMapper, FlowVersionMapper versionMapper,
                       FlowRunMapper runMapper, FlowStepRunMapper stepMapper,
                       FlowExecutor liteFlowExecutor, FlowNodeHandlerRefs handlers,
-                      RunStreamRegistry stream) {
+                      SseStreamRegistry stream) {
         this.flowMapper = flowMapper;
         this.versionMapper = versionMapper;
         this.runMapper = runMapper;

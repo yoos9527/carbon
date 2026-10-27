@@ -14,7 +14,7 @@ import com.carbon.modules.engine.invoke.InvokeRequest;
 import com.carbon.modules.engine.invoke.InvokeResult;
 import com.carbon.modules.engine.invoke.InvokeService;
 import com.carbon.modules.flow.executor.FlowState;
-import com.carbon.modules.flow.stream.RunStreamRegistry;
+import com.carbon.common.sse.SseStreamRegistry;
 import com.carbon.modules.flow.stream.StepEvent;
 import com.carbon.modules.flow.support.NodeTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,11 +42,11 @@ public class FlowNodeHandler implements NodeHandler {
     private final TemplateRenderer renderer;
     private final GroovySandbox sandbox;
     private final ObjectMapper objectMapper;
-    private final RunStreamRegistry stream;
+    private final SseStreamRegistry stream;
 
     public FlowNodeHandler(InvokeService invokeService, TemplateRenderer renderer,
                            GroovySandbox sandbox, ObjectMapper objectMapper,
-                           RunStreamRegistry stream) {
+                           SseStreamRegistry stream) {
         this.invokeService = invokeService;
         this.renderer = renderer;
         this.sandbox = sandbox;
@@ -90,7 +90,7 @@ public class FlowNodeHandler implements NodeHandler {
         if (runId == null) {
             return;
         }
-        stream.step(new StepEvent(runId, node.id(), nodeType, status, durationMs, error));
+        stream.step(runId, new StepEvent(runId, node.id(), nodeType, status, durationMs, error));
     }
 
     private long millisSince(long nanoTime) {

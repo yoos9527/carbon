@@ -13,12 +13,16 @@
     <artifactId>carbon-common-sensitive</artifactId>
 
     <name>carbon-common-sensitive</name>
-    <description>序列化脱敏：@Sensitive（密钥、Authorization 等字段输出为掩码）。</description>
+    <description>脱敏工具：MaskingUtils（HTTP 报文头/URL query/JSON body/日志参数按需打码）。</description>
 
     <dependencies>
         <dependency>
             <groupId>com.carbon</groupId>
             <artifactId>carbon-common-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-json</artifactId>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

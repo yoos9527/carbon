@@ -6,7 +6,7 @@ import com.carbon.framework.http.HttpExecutor;
 import com.carbon.modules.connector.domain.entity.Connector;
 import com.carbon.modules.connector.domain.entity.ConnectorAuth;
 import com.carbon.modules.connector.service.IConnectorService;
-import com.carbon.modules.engine.mask.MaskingUtils;
+import com.carbon.common.sensitive.MaskingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PathVariable;

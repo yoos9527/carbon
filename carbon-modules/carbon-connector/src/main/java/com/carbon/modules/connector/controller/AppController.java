@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 调用方应用管理。
@@ -42,6 +45,8 @@ public class AppController {
     /**
      * 创建应用。响应里的 {@code appSecret} 是明文，只此一次。
      */
+    @RepeatSubmit
+    @Log(title = "应用", businessType = BusinessType.INSERT)
     @PostMapping
     public R<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
         return R.ok(appService.create(
@@ -57,6 +62,7 @@ public class AppController {
      * <p>字段语义：{@code allowedConnectors}、{@code ipWhitelist} 传 {@code null} 表示不动，
      * 传空数组表示「清空 = 不限制」；{@code rateLimitQps} 传 {@code null} 表示不动。
      */
+    @Log(title = "应用", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         appService.update(id,
@@ -68,17 +74,21 @@ public class AppController {
         return R.ok();
     }
 
+    @RepeatSubmit
+    @Log(title = "应用", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}/secret")
     public R<Map<String, Object>> rotateSecret(@PathVariable Long id) {
         return R.ok(appService.rotateSecret(id));
     }
 
+    @Log(title = "应用", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}/status")
     public R<Void> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         appService.updateStatus(id, Integer.valueOf(String.valueOf(body.get("status"))));
         return R.ok();
     }
 
+    @Log(title = "应用", businessType = BusinessType.DELETE)
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         appService.delete(id);

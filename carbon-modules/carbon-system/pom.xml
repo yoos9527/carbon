@@ -24,6 +24,10 @@
             <groupId>com.carbon</groupId>
             <artifactId>carbon-common-mybatis</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-log</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

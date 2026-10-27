@@ -22,7 +22,7 @@ import com.carbon.modules.connector.service.IConnectorService;
 import com.carbon.modules.connector.service.IEnvService;
 import com.carbon.modules.engine.auth.AuthResolver;
 import com.carbon.modules.engine.extract.ResponseExtractor;
-import com.carbon.modules.engine.mask.MaskingUtils;
+import com.carbon.common.sensitive.MaskingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

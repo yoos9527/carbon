@@ -1,5 +1,6 @@
 package com.carbon.modules.flow.stream;
 
+import com.carbon.common.sse.SseStreamRegistry;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.carbon.common.core.exception.ServiceException;
 import com.carbon.modules.flow.domain.entity.FlowRun;
@@ -29,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>两条通路合起来才完整：
  * <ol>
- *   <li><b>实时</b>：{@link RunStreamRegistry} 的内存事件（本实例执行的流程才有）</li>
+ *   <li><b>实时</b>：{@link SseStreamRegistry} 的内存事件（本实例执行的流程才有）</li>
  *   <li><b>兜底</b>：定时查一次 {@code flow_run.status}。覆盖「流程在别的实例跑」「运行已结束」
  *       「finish 事件丢失」「进程重启后重连」四种情况——只慢一拍，不挂死</li>
  * </ol>
@@ -50,7 +51,7 @@ public class RunStreamService {
     @Value("${carbon.flow.stream.poll-ms:1000}")
     private long pollMs;
 
-    private final RunStreamRegistry registry;
+    private final SseStreamRegistry registry;
     private final FlowRunMapper runMapper;
     private final FlowStepRunMapper stepMapper;
 
@@ -60,7 +61,7 @@ public class RunStreamService {
         return thread;
     });
 
-    public RunStreamService(RunStreamRegistry registry, FlowRunMapper runMapper, FlowStepRunMapper stepMapper) {
+    public RunStreamService(SseStreamRegistry registry, FlowRunMapper runMapper, FlowStepRunMapper stepMapper) {
         this.registry = registry;
         this.runMapper = runMapper;
         this.stepMapper = stepMapper;
@@ -91,7 +92,7 @@ public class RunStreamService {
 
         // 先挂通道再发快照：挂载会补发缓冲事件，快照只是页面头部的状态
         registry.bind(emitter, key);
-        send(emitter, RunStreamRegistry.EVENT_SNAPSHOT, run);
+        send(emitter, SseStreamRegistry.EVENT_SNAPSHOT, run);
 
         ScheduledFuture<?> task = poller.scheduleWithFixedDelay(
                 () -> poll(runId, emitter, closed), pollMs, pollMs, TimeUnit.MILLISECONDS);
@@ -108,7 +109,7 @@ public class RunStreamService {
             FlowRun run = runMapper.selectById(runId);
             if (run == null || !"RUNNING".equals(run.getStatus())) {
                 if (closed.compareAndSet(false, true)) {
-                    send(emitter, RunStreamRegistry.EVENT_DONE, donePayload(runId, run));
+                    send(emitter, SseStreamRegistry.EVENT_DONE, donePayload(runId, run));
                     emitter.complete();
                 }
                 return;

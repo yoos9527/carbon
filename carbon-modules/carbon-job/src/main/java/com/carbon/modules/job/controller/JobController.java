@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 定时任务管理。
@@ -46,29 +49,37 @@ public class JobController extends BaseController {
         return R.ok(jobService.byId(id));
     }
 
+    @RepeatSubmit
+    @Log(title = "任务", businessType = BusinessType.INSERT)
     @PostMapping
     public R<Long> create(@Valid @RequestBody JobBo bo) {
         return R.ok(jobService.create(bo));
     }
 
+    @Log(title = "任务", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @Valid @RequestBody JobBo bo) {
         jobService.update(id, bo);
         return R.ok();
     }
 
+    @Log(title = "任务", businessType = BusinessType.DELETE)
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         jobService.delete(id);
         return R.ok();
     }
 
+    @RepeatSubmit
+    @Log(title = "任务", businessType = BusinessType.UPDATE)
     @PostMapping("/{id}/enable")
     public R<Void> enable(@PathVariable Long id) {
         jobService.enable(id);
         return R.ok();
     }
 
+    @RepeatSubmit
+    @Log(title = "任务", businessType = BusinessType.UPDATE)
     @PostMapping("/{id}/disable")
     public R<Void> disable(@PathVariable Long id) {
         jobService.disable(id);
@@ -76,6 +87,8 @@ public class JobController extends BaseController {
     }
 
     /** 立即执行一次（不改 cron 的下次触发时间）。 */
+    @RepeatSubmit
+    @Log(title = "任务", businessType = BusinessType.EXECUTE)
     @PostMapping("/{id}/trigger")
     public R<Void> trigger(@PathVariable Long id) {
         jobService.triggerNow(id);

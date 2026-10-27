@@ -37,6 +37,14 @@
             <artifactId>carbon-common-doc</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-idempotent</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-log</artifactId>
+        </dependency>
         <!-- 业务域 -->
         <dependency>
             <groupId>com.carbon</groupId>

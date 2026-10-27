@@ -44,6 +44,14 @@
             <groupId>com.jayway.jsonpath</groupId>
             <artifactId>json-path</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-log</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-idempotent</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

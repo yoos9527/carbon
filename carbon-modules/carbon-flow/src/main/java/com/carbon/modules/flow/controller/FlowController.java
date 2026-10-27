@@ -34,6 +34,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 流程定义接口。
@@ -74,16 +77,20 @@ public class FlowController extends BaseController {
         return R.ok(flowService.detail(id));
     }
 
+    @RepeatSubmit
+    @Log(title = "流程", businessType = BusinessType.INSERT)
     @PostMapping
     public R<Flow> create(@Valid @RequestBody FlowBo bo) {
         return R.ok(flowService.create(bo));
     }
 
+    @Log(title = "流程", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Flow> update(@PathVariable Long id, @Valid @RequestBody FlowBo bo) {
         return R.ok(flowService.update(id, bo));
     }
 
+    @Log(title = "流程", businessType = BusinessType.DELETE)
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         flowService.delete(id);
@@ -101,6 +108,8 @@ public class FlowController extends BaseController {
     /**
      * 发布当前草稿。
      */
+    @RepeatSubmit
+    @Log(title = "流程", businessType = BusinessType.OTHER)
     @PostMapping("/{id}/publish")
     public R<FlowVersion> publish(@PathVariable Long id,
                                   @RequestParam(required = false, defaultValue = "anonymous") String operator) {
@@ -115,6 +124,8 @@ public class FlowController extends BaseController {
     /**
      * 回滚到历史版本（指针回退 + 草稿同步）。
      */
+    @RepeatSubmit
+    @Log(title = "流程", businessType = BusinessType.OTHER)
     @PostMapping("/{id}/rollback")
     public R<FlowVersion> rollback(@PathVariable Long id,
                                    @Valid @RequestBody FlowRollbackBo bo,
@@ -128,6 +139,7 @@ public class FlowController extends BaseController {
      * <p>同步适合「一两秒能跑完、结果直接看」的流程；慢流程用 {@code /run-async}，
      * 否则一个 30 秒的流程会把浏览器连接和 Tomcat 线程一起占住。
      */
+    @Log(title = "流程", businessType = BusinessType.EXECUTE)
     @PostMapping("/{id}/run")
     public R<FlowRunResult> run(@PathVariable Long id,
                                 @RequestBody(required = false) Map<String, Object> input) {
@@ -139,6 +151,8 @@ public class FlowController extends BaseController {
      *
      * <p>队列满时先把那条记录收成 FAILED 再报错——不能留下一条永远 RUNNING 的幽灵。
      */
+    @RepeatSubmit
+    @Log(title = "流程", businessType = BusinessType.EXECUTE)
     @PostMapping("/{id}/run-async")
     public R<FlowRun> runAsync(@PathVariable Long id,
                                @RequestBody(required = false) Map<String, Object> input) {

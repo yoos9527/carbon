@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Set;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 连接器管理接口。
@@ -59,30 +62,37 @@ public class ConnectorController extends BaseController {
         return R.ok(connectorService.detail(id));
     }
 
+    @Log(title = "连接器", businessType = BusinessType.INSERT)
+    @RepeatSubmit
     @PostMapping
     public R<Long> create(@Valid @RequestBody ConnectorBo bo) {
         return R.ok(connectorService.create(bo));
     }
 
     /** 复制连接器：body 可空（`{}` / 不传），code 与 name 留空则自动推导 */
+    @Log(title = "连接器", businessType = BusinessType.INSERT)
+    @RepeatSubmit
     @PostMapping("/{id}/copy")
     public R<Long> copy(@PathVariable Long id,
                         @Valid @RequestBody(required = false) ConnectorCopyBo bo) {
         return R.ok(connectorService.copy(id, bo));
     }
 
+    @Log(title = "连接器", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @Valid @RequestBody ConnectorBo bo) {
         connectorService.update(id, bo);
         return R.ok();
     }
 
+    @Log(title = "连接器", businessType = BusinessType.DELETE)
     @DeleteMapping
     public R<Void> delete(@RequestBody List<Long> ids) {
         connectorService.delete(ids);
         return R.ok();
     }
 
+    @Log(title = "连接器", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}/status")
     public R<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
         connectorService.updateStatus(id, status);

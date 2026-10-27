@@ -40,6 +40,14 @@
             <groupId>com.carbon</groupId>
             <artifactId>carbon-framework-dag</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-log</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-idempotent</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

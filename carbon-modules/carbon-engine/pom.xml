@@ -26,6 +26,10 @@
         </dependency>
         <dependency>
             <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-sensitive</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
             <artifactId>carbon-common-redis</artifactId>
         </dependency>
         <dependency>

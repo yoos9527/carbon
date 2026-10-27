@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 环境管理接口。
@@ -52,17 +55,21 @@ public class EnvController {
         return R.ok(envService.varsOf(code));
     }
 
+    @RepeatSubmit
+    @Log(title = "环境", businessType = BusinessType.INSERT)
     @PostMapping
     public R<Long> create(@Valid @RequestBody EnvBo bo) {
         return R.ok(envService.create(bo));
     }
 
+    @Log(title = "环境", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @Valid @RequestBody EnvBo bo) {
         envService.update(id, bo);
         return R.ok();
     }
 
+    @Log(title = "环境", businessType = BusinessType.DELETE)
     @DeleteMapping
     public R<Void> delete(@RequestBody List<Long> ids) {
         envService.delete(ids);
@@ -70,6 +77,7 @@ public class EnvController {
     }
 
     /** 设为唯一默认（无 body，页面上一个按钮的事） */
+    @Log(title = "环境", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}/default")
     public R<Void> setDefault(@PathVariable Long id) {
         envService.setDefault(id);

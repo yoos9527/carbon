@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Set;
+import com.carbon.common.log.BusinessType;
+import com.carbon.common.log.Log;
+import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
  * 接口管理。挂在连接器下面：{@code /api/connectors/{connectorId}/operations}。
@@ -54,11 +57,14 @@ public class OperationController extends BaseController {
         return R.ok(operationService.detail(connectorId, id));
     }
 
+    @RepeatSubmit
+    @Log(title = "接口", businessType = BusinessType.INSERT)
     @PostMapping
     public R<Long> create(@PathVariable Long connectorId, @Valid @RequestBody OperationBo bo) {
         return R.ok(operationService.create(connectorId, bo));
     }
 
+    @Log(title = "接口", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long connectorId, @PathVariable Long id,
                           @Valid @RequestBody OperationBo bo) {
@@ -66,6 +72,7 @@ public class OperationController extends BaseController {
         return R.ok();
     }
 
+    @Log(title = "接口", businessType = BusinessType.DELETE)
     @DeleteMapping
     public R<Void> delete(@PathVariable Long connectorId, @RequestBody List<Long> ids) {
         operationService.delete(connectorId, ids);

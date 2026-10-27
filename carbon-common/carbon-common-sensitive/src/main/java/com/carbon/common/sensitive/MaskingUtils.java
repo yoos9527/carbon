@@ -1,4 +1,4 @@
-package com.carbon.modules.engine.mask;
+package com.carbon.common.sensitive;
 
 import com.carbon.common.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +22,10 @@ import java.util.Set;
  * <p>判定分两条路：<b>键名黑名单</b>（{@code Authorization}/{@code *secret*}/{@code *password*} 等）
  * 与 <b>显式名单</b>（鉴权解析器告诉我们哪个 header 是它刚注入的密钥）。
  * 只有键名黑名单会漏（三方可能用 {@code X-Wx-Ticket} 这种名字），所以两条都要有。
+ *
+ * <p><b>为什么住在 `carbon-common-sensitive` 而不是引擎里</b>：脱敏是横切关注点，引擎（HTTP 报文、
+ * 抽取结果）与操作日志（参数快照）都要用同一套规则。两处各写一份的下场是可预见的——
+ * 某天只给其中一处加了新关键词，另一处就开始往日志里写密钥。
  *
  * @author carbon
  */
@@ -112,39 +116,66 @@ public final class MaskingUtils {
     }
 
     /**
+     * 「整个子树都是凭据」的键名。
+     *
+     * <p>为什么需要它：靠键名黑名单判断时，{@code {"config":{"value":"secret"}}} 里的
+     * {@code value} 看起来完全无害——可它正是 {@code connector_auth.config} 存密钥的地方。
+     * 平台里 {@code config} 这个键<b>只</b>用于鉴权配置（{@code ConnectorBo.AuthBo.config}），
+     * 所以整块打码；{@code authType} 在它外面，仍然可读，审计需要的是「用的哪种鉴权」而不是密钥。
+     *
+     * <p>如果将来真有「名字叫 config 但内容不敏感」的字段，换个名字比放宽这里更安全——
+     * 少一次密钥进日志表，比省事重要。
+     */
+    public static final Set<String> CREDENTIAL_CONTAINER_KEYS = Set.of("config");
+
+    /**
      * 脱敏 JSON 报文体里的敏感字段（递归）。
      *
      * <p>失败时返回原文——脱敏工具不应该让调用方因为「日志脱敏失败」而整个请求失败，
      * 这是它与业务校验最大的区别。
      */
     public static String maskJson(String json) {
+        return maskJson(json, Set.of());
+    }
+
+    /**
+     * @param wholeKeys 命中即「整棵子树打码」的键名（除黑名单外），见 {@link #CREDENTIAL_CONTAINER_KEYS}
+     */
+    public static String maskJson(String json, Set<String> wholeKeys) {
         if (json == null || json.isBlank()) {
             return json;
         }
         try {
             JsonNode node = JsonUtils.mapper().readTree(json);
-            maskNode(node);
+            maskNode(node, wholeKeys);
             return JsonUtils.mapper().writeValueAsString(node);
         } catch (Exception e) {
             return json;
         }
     }
 
-    private static void maskNode(JsonNode node) {
+    private static void maskNode(JsonNode node, Set<String> wholeKeys) {
         if (node instanceof ObjectNode object) {
             Iterator<String> names = object.fieldNames();
             while (names.hasNext()) {
                 String name = names.next();
                 JsonNode child = object.get(name);
-                if (child != null && child.isValueNode() && isSensitiveKey(name)) {
+                if (child == null) {
+                    continue;
+                }
+                boolean whole = wholeKeys.contains(name.toLowerCase(Locale.ROOT));
+                if (child.isValueNode() && (whole || isSensitiveKey(name))) {
                     String text = child.asText();
                     object.put(name, text.length() < MIN_MASK_LENGTH ? text : MASK);
-                } else if (child != null) {
-                    maskNode(child);
+                } else if (whole && !child.isValueNode()) {
+                    // 容器整体换成掩码字符串：保留「这里有个鉴权配置」的信息量，丢掉内容
+                    object.put(name, MASK);
+                } else {
+                    maskNode(child, wholeKeys);
                 }
             }
         } else if (node != null && node.isArray()) {
-            node.forEach(MaskingUtils::maskNode);
+            node.forEach(child -> maskNode(child, wholeKeys));
         }
     }
 
