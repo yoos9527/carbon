@@ -70,6 +70,8 @@ declare global {
     VITE_CDN: boolean;
     VITE_HIDE_HOME: string;
     VITE_COMPRESSION: ViteCompression;
+    /** 后端接口前缀（dev = /api，由 vite proxy 转发到 8080） */
+    VITE_APP_BASE_API: string;
   }
 
   /**

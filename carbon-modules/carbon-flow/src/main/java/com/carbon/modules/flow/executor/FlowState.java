@@ -49,6 +49,11 @@ public final class FlowState implements DagExecutionContext {
         CURRENT.remove();
     }
 
+    /** 不在执行线程内时返回 {@code null}——给「顺手播报一下」这类可缺省的逻辑用。 */
+    public static FlowState currentOrNull() {
+        return CURRENT.get();
+    }
+
     public static FlowState current() {
         FlowState state = CURRENT.get();
         if (state == null) {

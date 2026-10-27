@@ -6,13 +6,22 @@ import com.carbon.common.core.domain.R;
 import com.carbon.common.core.domain.TableDataInfo;
 import com.carbon.common.web.domain.BaseController;
 import com.carbon.framework.dag.validator.ValidationError;
+import com.carbon.common.core.exception.ServiceException;
+import com.carbon.modules.flow.config.FlowAsyncConfig;
 import com.carbon.modules.flow.domain.bo.FlowBo;
+import com.carbon.modules.flow.domain.bo.FlowRollbackBo;
 import com.carbon.modules.flow.domain.entity.Flow;
+import com.carbon.modules.flow.domain.entity.FlowRun;
 import com.carbon.modules.flow.domain.entity.FlowVersion;
 import com.carbon.modules.flow.executor.FlowRunResult;
 import com.carbon.modules.flow.executor.FlowRunner;
 import com.carbon.modules.flow.service.IFlowService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,12 +47,17 @@ import java.util.Map;
 @RequestMapping("/api/flows")
 public class FlowController extends BaseController {
 
+    private static final Logger log = LoggerFactory.getLogger(FlowController.class);
+
     private final IFlowService flowService;
     private final FlowRunner flowRunner;
+    private final ThreadPoolTaskExecutor flowRunExecutor;
 
-    public FlowController(IFlowService flowService, FlowRunner flowRunner) {
+    public FlowController(IFlowService flowService, FlowRunner flowRunner,
+                          @Qualifier(FlowAsyncConfig.EXECUTOR) ThreadPoolTaskExecutor flowRunExecutor) {
         this.flowService = flowService;
         this.flowRunner = flowRunner;
+        this.flowRunExecutor = flowRunExecutor;
     }
 
     @GetMapping
@@ -99,11 +113,50 @@ public class FlowController extends BaseController {
     }
 
     /**
-     * 手工试跑当前已发布版本。
+     * 回滚到历史版本（指针回退 + 草稿同步）。
+     */
+    @PostMapping("/{id}/rollback")
+    public R<FlowVersion> rollback(@PathVariable Long id,
+                                   @Valid @RequestBody FlowRollbackBo bo,
+                                   @RequestParam(required = false, defaultValue = "anonymous") String operator) {
+        return R.ok(flowService.rollback(id, bo.getVersion(), operator));
+    }
+
+    /**
+     * 手工试跑当前已发布版本（同步）：跑完才返回，响应里带结果摘要。
+     *
+     * <p>同步适合「一两秒能跑完、结果直接看」的流程；慢流程用 {@code /run-async}，
+     * 否则一个 30 秒的流程会把浏览器连接和 Tomcat 线程一起占住。
      */
     @PostMapping("/{id}/run")
     public R<FlowRunResult> run(@PathVariable Long id,
                                 @RequestBody(required = false) Map<String, Object> input) {
         return R.ok(flowRunner.run(id, input == null ? Map.of() : input, "manual", "console"));
+    }
+
+    /**
+     * 手工试跑（异步）：立刻返回 RUNNING 的运行记录，前端拿 {@code run.id} 去连 SSE 看进度。
+     *
+     * <p>队列满时先把那条记录收成 FAILED 再报错——不能留下一条永远 RUNNING 的幽灵。
+     */
+    @PostMapping("/{id}/run-async")
+    public R<FlowRun> runAsync(@PathVariable Long id,
+                               @RequestBody(required = false) Map<String, Object> input) {
+        FlowRunner.Prepared prepared = flowRunner.prepare(
+                id, input == null ? Map.of() : input, "manual", "console");
+        try {
+            flowRunExecutor.execute(() -> {
+                try {
+                    flowRunner.execute(prepared);
+                } catch (RuntimeException e) {
+                    // execute 内部已把运行记录收成 FAILED，这里只留日志
+                    log.warn("[flow] 异步执行失败 run={}：{}", prepared.run().getId(), e.getMessage());
+                }
+            });
+        } catch (TaskRejectedException e) {
+            flowRunner.abort(prepared, "执行队列已满，请稍后重试");
+            throw new ServiceException("执行队列已满，请稍后重试");
+        }
+        return R.ok(prepared.run());
     }
 }

@@ -12,11 +12,14 @@ import com.carbon.modules.flow.domain.entity.FlowRun;
 import com.carbon.modules.flow.domain.entity.FlowStepRun;
 import com.carbon.modules.flow.mapper.FlowRunMapper;
 import com.carbon.modules.flow.mapper.FlowStepRunMapper;
+import com.carbon.modules.flow.stream.RunStreamService;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Map;
@@ -34,10 +37,13 @@ public class FlowRunController extends BaseController {
 
     private final FlowRunMapper runMapper;
     private final FlowStepRunMapper stepMapper;
+    private final RunStreamService streamService;
 
-    public FlowRunController(FlowRunMapper runMapper, FlowStepRunMapper stepMapper) {
+    public FlowRunController(FlowRunMapper runMapper, FlowStepRunMapper stepMapper,
+                             RunStreamService streamService) {
         this.runMapper = runMapper;
         this.stepMapper = stepMapper;
+        this.streamService = streamService;
     }
 
     @GetMapping
@@ -72,5 +78,16 @@ public class FlowRunController extends BaseController {
                 .eq("flow_run_id", id)
                 .orderByAsc("exec_index"));
         return R.ok(Map.of("run", run, "steps", steps));
+    }
+
+    /**
+     * 运行进度 SSE。
+     *
+     * <p>事件顺序：{@code snapshot}（运行记录当前状态）→ 若干 {@code step}（节点进/出）→ {@code done}。
+     * 已结束的运行连上来会立刻收到补发的全部事件，然后连接被关掉，不会挂着。
+     */
+    @GetMapping(value = "/{id}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@PathVariable Long id) {
+        return streamService.open(id);
     }
 }

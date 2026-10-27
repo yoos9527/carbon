@@ -14,6 +14,9 @@ import com.carbon.modules.engine.invoke.InvokeRequest;
 import com.carbon.modules.engine.invoke.InvokeResult;
 import com.carbon.modules.engine.invoke.InvokeService;
 import com.carbon.modules.flow.executor.FlowState;
+import com.carbon.modules.flow.stream.RunStreamRegistry;
+import com.carbon.modules.flow.stream.StepEvent;
+import com.carbon.modules.flow.support.NodeTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,17 +42,27 @@ public class FlowNodeHandler implements NodeHandler {
     private final TemplateRenderer renderer;
     private final GroovySandbox sandbox;
     private final ObjectMapper objectMapper;
+    private final RunStreamRegistry stream;
 
     public FlowNodeHandler(InvokeService invokeService, TemplateRenderer renderer,
-                           GroovySandbox sandbox, ObjectMapper objectMapper) {
+                           GroovySandbox sandbox, ObjectMapper objectMapper,
+                           RunStreamRegistry stream) {
         this.invokeService = invokeService;
         this.renderer = renderer;
         this.sandbox = sandbox;
         this.objectMapper = objectMapper;
+        this.stream = stream;
     }
 
     @Override
     public void execute(NodeDef node, DagExecutionContext ctx) throws Exception {
+        // 实时播报是「锦上添花」：拿不到运行上下文（比如被单测直接调用）就安静跳过，
+        // 绝不能因为播报失败把节点执行带崩
+        FlowState runState = FlowState.currentOrNull();
+        String runId = runState == null ? null : runState.flowRunId();
+        String nodeType = NodeTypes.of(node);
+        long beganAt = System.nanoTime();
+        emit(runId, node, nodeType, StepEvent.RUNNING, null, null);
         try {
             switch (node) {
                 case CallNode call -> call(call, ctx);
@@ -59,12 +72,29 @@ public class FlowNodeHandler implements NodeHandler {
                 default -> {
                 }
             }
-        } catch (RuntimeException e) {
+            emit(runId, node, nodeType, StepEvent.SUCCESS, millisSince(beganAt), null);
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             // LiteFlow 的 CmpStep 不保证带上异常对象，这里留一份给 flow_step_run 用
             FlowState.evalVarsOf(ctx);
-            FlowState.current().lastError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            FlowState state = FlowState.currentOrNull();
+            if (state != null) {
+                state.lastError(message);
+            }
+            emit(runId, node, nodeType, StepEvent.FAILED, millisSince(beganAt), message);
             throw e;
         }
+    }
+
+    private void emit(String runId, NodeDef node, String nodeType, String status, Long durationMs, String error) {
+        if (runId == null) {
+            return;
+        }
+        stream.step(new StepEvent(runId, node.id(), nodeType, status, durationMs, error));
+    }
+
+    private long millisSince(long nanoTime) {
+        return (System.nanoTime() - nanoTime) / 1_000_000L;
     }
 
     /* ---------- CONNECTOR_CALL ---------- */

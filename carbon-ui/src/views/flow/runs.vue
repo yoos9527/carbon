@@ -10,8 +10,10 @@ import {
   loadFlowNameMap,
   pageFlowRuns,
   pageFlows,
+  streamFlowRun,
   type Flow,
   type FlowRun,
+  type FlowRunStepEvent,
   type FlowStepRun
 } from "@/api/flow";
 import { MAX_PAGE_SIZE, PAGE_SIZES, labelOf, tagOf } from "@/api/common";
@@ -96,19 +98,81 @@ function cost(row: FlowRun) {
 /* ---------------- 详情抽屉 ---------------- */
 const drawer = reactive({ visible: false, loading: false });
 const detail = ref<{ run: FlowRun; steps: Array<FlowStepRun> } | null>(null);
+/** 正在跑的运行 id（非空表示可以连 SSE） */
+const detailRunId = ref<string | null>(null);
+/** SSE 连接状态：idle（未连）/ live（在连）/ lost（断了，浏览器在自动重连） */
+const streamState = ref<"idle" | "live" | "lost">("idle");
+/** 实时步骤（内存里攒的，运行结束前 flow_step_run 还是空的） */
+const liveSteps = ref<Array<FlowRunStepEvent>>([]);
+let closeStream: (() => void) | null = null;
 
 async function openDetail(id: string) {
   drawer.visible = true;
   drawer.loading = true;
   detail.value = null;
+  detailRunId.value = id;
   try {
     detail.value = await getFlowRun(id);
     await warmStepNames(detail.value.steps);
+    if (detail.value.run.status === "RUNNING") followRun(id);
   } catch (e) {
     showError(e);
   } finally {
     drawer.loading = false;
   }
+}
+
+/**
+ * 跟随运行进度。
+ *
+ * 为什么「运行中」才连：跑完的运行连上去只会补发一遍历史事件再关闭，纯浪费一次长连接；
+ * 已结束的运行直接读库更简单。真要看过程，等它 RUNNING 时点进来。
+ */
+function followRun(id: string) {
+  stopStream();
+  liveSteps.value = [];
+  streamState.value = "live";
+  closeStream = streamFlowRun(id, {
+    onSnapshot: run => {
+      if (detail.value) detail.value.run = { ...detail.value.run, ...run };
+    },
+    onStep: event => {
+      liveSteps.value = [...liveSteps.value, event];
+    },
+    onDone: async event => {
+      streamState.value = "idle";
+      stopStream();
+      // 终态事件里带了完整明细，但字段不全（没有 connectorId 等），重新拉一次最稳
+      if (detailRunId.value === id) {
+        try {
+          const fresh = await getFlowRun(id);
+          detail.value = fresh;
+          await warmStepNames(fresh.steps);
+        } catch (e) {
+          showError(e);
+        }
+        if (event?.status) await load();
+      }
+    },
+    onError: () => {
+      // EventSource 自己会重连，这里只改状态标记，不主动关
+      streamState.value = "lost";
+    }
+  });
+}
+
+function stopStream() {
+  if (closeStream) {
+    closeStream();
+    closeStream = null;
+  }
+  if (streamState.value !== "idle") streamState.value = "idle";
+}
+
+function onDrawerClosed() {
+  stopStream();
+  liveSteps.value = [];
+  detailRunId.value = null;
 }
 
 /** 步骤里存的是 connectorId/operationId，名字得自己查（接口列表已按连接器缓存） */
@@ -171,6 +235,18 @@ async function copy(text?: string) {
     ElMessage.warning("复制失败，请手动选中");
   }
 }
+
+/** 实时步骤按节点聚合成一行：进入/离开两条事件合成一条，表格才好读 */
+const liveRows = computed(() => {
+  const byNode = new Map<string, FlowRunStepEvent>();
+  for (const event of liveSteps.value) {
+    byNode.set(event.nodeId, event);
+  }
+  return [...byNode.values()].map(event => ({
+    ...event,
+    durationMs: event.durationMs == null ? undefined : Number(event.durationMs)
+  }));
+});
 
 const failedSteps = computed(
   () => detail.value?.steps.filter(s => s.status !== "SUCCESS").length ?? 0
@@ -308,7 +384,12 @@ onMounted(async () => {
       />
     </div>
 
-    <el-drawer v-model="drawer.visible" title="运行详情" size="65%">
+    <el-drawer
+      v-model="drawer.visible"
+      title="运行详情"
+      size="65%"
+      @closed="onDrawerClosed"
+    >
       <div v-loading="drawer.loading">
         <template v-if="detail">
           <el-alert
@@ -356,6 +437,75 @@ onMounted(async () => {
               </el-button>
             </el-descriptions-item>
           </el-descriptions>
+
+          <el-alert
+            v-if="streamState !== 'idle' || liveRows.length"
+            class="mt-4"
+            :type="streamState === 'lost' ? 'warning' : 'info'"
+            show-icon
+            :closable="false"
+            :title="
+              streamState === 'lost'
+                ? '实时连接断开，浏览器正在重连（期间以列表右侧的状态为准）'
+                : '正在实时跟踪本次运行，每步完成会立刻出现在下面'
+            "
+          />
+
+          <div v-if="liveRows.length" class="mt-3">
+            <div class="mb-1 flex items-center gap-2">
+              <span class="font-medium">实时步骤</span>
+              <span class="text-xs text-gray-400">
+                运行结束后与下方落库明细合并
+              </span>
+            </div>
+            <el-table :data="liveRows" border size="small">
+              <el-table-column prop="nodeId" label="节点" min-width="140">
+                <template #default="{ row }">
+                  <span class="font-mono text-xs">{{ row.nodeId }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="nodeType" label="类型" width="130">
+                <template #default="{ row }">
+                  <span class="font-mono text-xs">{{ row.nodeType }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag
+                    size="small"
+                    :type="
+                      row.status === 'FAILED'
+                        ? 'danger'
+                        : row.status === 'SUCCESS'
+                          ? 'success'
+                          : 'primary'
+                    "
+                  >
+                    {{
+                      row.status === "RUNNING"
+                        ? "执行中"
+                        : row.status === "SUCCESS"
+                          ? "成功"
+                          : "失败"
+                    }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="耗时" width="100">
+                <template #default="{ row }">
+                  {{ row.durationMs == null ? "-" : `${row.durationMs} ms` }}
+                </template>
+              </el-table-column>
+              <el-table-column label="失败原因" min-width="200">
+                <template #default="{ row }">
+                  <span v-if="row.error" class="text-xs text-red-500">
+                    {{ row.error }}
+                  </span>
+                  <span v-else class="text-xs text-gray-400">-</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
 
           <div class="mt-4 mb-1 flex items-center gap-2">
             <span class="font-medium">节点执行</span>

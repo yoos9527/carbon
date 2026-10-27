@@ -45,4 +45,17 @@ public interface IFlowService {
     FlowVersion publish(Long id, String operator);
 
     List<FlowVersion> versions(Long id);
+
+    /**
+     * 回滚到某个历史版本：把发布指针指回去，并把草稿覆盖成该版本的 DSL。
+     *
+     * <p>为什么不「追加一个新版本」：版本快照是不可变的历史，回滚是「当前生效的是哪一版」，
+     * 追加只会让 history 里出现两个 v2 的等价物，反而看不出到底回滚过。
+     *
+     * @param id       流程 id
+     * @param version  目标版本号（必须已存在）
+     * @param operator 操作者
+     * @return 被指向的版本快照
+     */
+    FlowVersion rollback(Long id, Integer version, String operator);
 }

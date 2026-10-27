@@ -143,7 +143,9 @@ public class FlowServiceImpl implements IFlowService {
             throw new ServiceException("流程校验未通过（共 " + errors.size() + " 处）：" + detail);
         }
 
-        int next = flow.getPublishedVersion() == null ? 1 : flow.getPublishedVersion() + 1;
+        // 不能拿「当前指针 + 1」当下一版：回滚之后指针会往回走，再发布就会撞上已存在的版本号
+        // （uk_flow_version 直接报唯一键冲突），这里取历史最大值 + 1
+        int next = nextVersion(id);
         String chainId = FlowRunner.chainIdOf(flow.getCode(), next);
         // 先编译再落库：编译失败不能留下一个指向「不存在的版本」的指针
         CompiledFlow compiled = ElCompiler.compile(dsl, chainId);
@@ -170,5 +172,53 @@ public class FlowServiceImpl implements IFlowService {
         return versionMapper.selectList(new QueryWrapper<FlowVersion>()
                 .eq("flow_id", id)
                 .orderByDesc("version"));
+    }
+
+    @Override
+    @Transactional
+    public FlowVersion rollback(Long id, Integer version, String operator) {
+        Flow flow = detail(id);
+        if (version == null) {
+            throw new ServiceException("请指定要回滚到的版本号");
+        }
+        FlowVersion target = versionMapper.selectOne(new QueryWrapper<FlowVersion>()
+                .eq("flow_id", id)
+                .eq("version", version));
+        if (target == null) {
+            throw new ServiceException("版本不存在：v" + version);
+        }
+        // 已经在这一版上就别重复写库、重复编译（画布上误点两下是常事）
+        if (version.equals(flow.getPublishedVersion())) {
+            return target;
+        }
+        DagDsl dsl = FlowDsls.parse(target.getDsl());
+        List<ValidationError> errors = FlowDsls.validate(dsl);
+        if (!errors.isEmpty()) {
+            String detail = errors.stream()
+                    .limit(5)
+                    .map(e -> e.code() + ": " + e.message())
+                    .collect(Collectors.joining("；"));
+            // 快照当初是校验通过的，现在还不过说明校验规则变严了。此时把指针指过去，
+            // 等于让线上跑一份「按现在的规则根本发布不出去」的图
+            throw new ServiceException("该版本按当前校验规则不通过（共 " + errors.size() + " 处），不能回滚：" + detail);
+        }
+        String chainId = FlowRunner.chainIdOf(flow.getCode(), version);
+        ChainRegistry.register(ElCompiler.compile(dsl, chainId), chainId);
+
+        Integer from = flow.getPublishedVersion();
+        flow.setPublishedVersion(version);
+        // 草稿跟着回滚：否则画布显示 v5 的图、实际跑的是 v2，用户永远对不上
+        flow.setDraftDsl(target.getDsl());
+        flow.setStatus(1);
+        flowMapper.updateById(flow);
+        log.info("[flow] 回滚 {} v{} → v{}（operator={}）", flow.getCode(), from, version, operator);
+        return target;
+    }
+
+    private int nextVersion(Long flowId) {
+        List<Object> max = versionMapper.selectObjs(new QueryWrapper<FlowVersion>()
+                .select("MAX(version)")
+                .eq("flow_id", flowId));
+        return max.isEmpty() || max.get(0) == null ? 1 : ((Number) max.get(0)).intValue() + 1;
     }
 }

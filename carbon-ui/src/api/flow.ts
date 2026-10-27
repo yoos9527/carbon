@@ -1,4 +1,4 @@
-import { http, type TableDataInfo } from "@/utils/http";
+import { API_BASE, http, type TableDataInfo } from "@/utils/http";
 import type { PageQuery } from "@/api/common";
 
 /**
@@ -75,6 +75,67 @@ export const TRIGGER_TYPES = [
   { value: "manual", label: "手工" },
   { value: "job", label: "调度" }
 ];
+
+/* ---------- 运行进度（SSE） ---------- */
+
+/** 单个节点的实时播报：RUNNING（进入）/ SUCCESS / FAILED（离开） */
+export interface FlowRunStepEvent {
+  runId: string;
+  nodeId: string;
+  nodeType: string;
+  status: string;
+  /** 包装了 ToStringSerializer，Long 会以字符串下发 */
+  durationMs?: number | string;
+  error?: string;
+}
+
+/** 终态事件：带完整明细，收到即可断开 */
+export interface FlowRunDoneEvent {
+  runId: string;
+  status?: string;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number | string;
+  steps?: Array<FlowStepRun>;
+}
+
+export interface FlowRunStreamHandlers {
+  onSnapshot?: (run: FlowRun) => void;
+  onStep?: (event: FlowRunStepEvent) => void;
+  onDone?: (event: FlowRunDoneEvent) => void;
+  /** 连接异常（浏览器会自动重连，这里只做提示） */
+  onError?: (event: Event) => void;
+}
+
+/**
+ * 订阅运行进度，返回「断开」函数。
+ *
+ * 用原生 `EventSource` 而不是 axios：SSE 是长连接，axios 拿到的是迟迟不结束的响应体。
+ * 后端只发命名事件（snapshot/step/done），所以必须 `addEventListener`，默认的
+ * `onmessage` 收不到。服务端在 `done` 后主动关连接，浏览器对已完成的事件流不会重连。
+ */
+export function streamFlowRun(
+  runId: string,
+  handlers: FlowRunStreamHandlers
+): () => void {
+  const source = new EventSource(`${API_BASE}/flow-runs/${runId}/stream`);
+  const on = <T>(name: string, fn?: (payload: T) => void) => {
+    if (!fn) return;
+    source.addEventListener(name, (event: MessageEvent) => {
+      try {
+        fn(JSON.parse(event.data) as T);
+      } catch {
+        // 单条事件解析失败不该让整条流断掉
+      }
+    });
+  };
+  on<FlowRun>("snapshot", handlers.onSnapshot);
+  on<FlowRunStepEvent>("step", handlers.onStep);
+  on<FlowRunDoneEvent>("done", handlers.onDone);
+  if (handlers.onError) source.onerror = handlers.onError;
+  return () => source.close();
+}
 
 export function pageFlows(
   query: PageQuery & { keyword?: string; status?: number }

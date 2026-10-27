@@ -52,7 +52,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 后端接口前缀。
+ *
+ * 曾经所有 api 模块只写 `/envs` 这种相对路径、axios 又没设 baseURL，
+ * 结果请求打到前端自己的静态服务器上（拿到 index.html，`code` 字段不存在 → 页面全部"加载失败"）。
+ * 统一在这里拼前缀，和 vite 的 proxy、nginx 的 location /api 三处对齐。
+ */
+export const API_BASE = import.meta.env.VITE_APP_BASE_API ?? "/api";
+
 const defaultConfig: AxiosRequestConfig = {
+  baseURL: API_BASE,
   // 网关与编排可能较慢，比基座默认的 10s 放宽
   timeout: 60000,
   headers: {
