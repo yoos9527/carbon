@@ -50,3 +50,6 @@ Thumbs.db
 
 # ---- 本机私有覆盖（含本地口令，绝不入库）----
 **/application-local-private.yml
+
+# flatten-maven-plugin 生成物
+.flattened-pom.xml
