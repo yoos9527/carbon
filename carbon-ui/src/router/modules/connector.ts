@@ -19,6 +19,14 @@ export default {
       }
     },
     {
+      path: "/envs",
+      name: "EnvList",
+      component: () => import("@/views/env/index.vue"),
+      meta: {
+        title: "环境变量"
+      }
+    },
+    {
       path: "/connectors/:id/operations",
       name: "ConnectorOperations",
       component: () => import("@/views/connector/operations.vue"),
