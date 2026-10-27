@@ -1,0 +1,342 @@
+[
+  {
+    "KeyNo": "qcc-mock-0001",
+    "QccCode": "QCCMOCK0001",
+    "Name": "企查查科技股份有限公司",
+    "No": "320594000000001",
+    "CreditCode": "91320594MA1MOCK001",
+    "Status": "在业",
+    "StartDate": "2014-03-12",
+    "EndDate": null,
+    "OperName": "陈德强",
+    "OperId": "qcc-mock-oper-1",
+    "BelongOrg": "苏州市市场监督管理局",
+    "Province": "江苏省",
+    "RegistCapi": "1000万元人民币",
+    "RegisteredCapital": "1000",
+    "RegisteredCapitalUnit": "万元",
+    "RegisteredCapitalCCY": "人民币",
+    "RecCap": "500万元人民币",
+    "EconKind": "股份有限公司(非上市)",
+    "Address": "苏州工业园区星湖街328号创意产业园",
+    "Scope": "数据处理服务；信息技术咨询服务；企业征信业务；软件开发；互联网数据服务。",
+    "TermStart": "2014-03-12",
+    "TermEnd": "长期",
+    "CheckDate": "2024-06-01",
+    "OrgNo": "MA1MOCK00-1",
+    "IsOnStock": "0",
+    "StockNumber": "",
+    "StockType": "",
+    "InsuredCount": "412",
+    "PersonScope": "400-499人",
+    "EnglishName": "Qichacha Technology Co., Ltd.",
+    "EntType": "0",
+    "UpdatedDate": "2026-09-30",
+    "Industry": {"Code": "I65", "Name": "软件和信息技术服务业"},
+    "Area": {"Province": "江苏省", "City": "苏州市", "District": "工业园区"},
+    "TagList": [{"Name": "高新技术企业"}, {"Name": "专精特新"}, {"Name": "瞪羚企业"}],
+    "OriginalName": [{"Name": "苏州企查查信息技术有限公司"}],
+    "ImageUrl": "",
+    "ContactInfo": {"Tel": "0512-88888888", "Email": "service@qcc-mock.local", "WebSite": "https://qcc-mock.local"},
+    "Partners": [
+      {"Name": "陈德强", "StockPercent": "60%", "ShouldCapi": "600", "ShoudDate": "2014-03-12", "InvestType": "自然人股东"},
+      {"Name": "苏州工业园区创业投资有限公司", "StockPercent": "25%", "ShouldCapi": "250", "ShoudDate": "2016-08-01", "InvestType": "企业法人"},
+      {"Name": "员工持股平台（有限合伙）", "StockPercent": "15%", "ShouldCapi": "150", "ShoudDate": "2018-05-20", "InvestType": "合伙企业"}
+    ],
+    "Employees": [
+      {"Name": "陈德强", "Position": "董事长"},
+      {"Name": "李慧", "Position": "董事兼总经理"},
+      {"Name": "王建国", "Position": "监事"}
+    ],
+    "Branches": [
+      {"Name": "企查查科技股份有限公司北京分公司", "CreditCode": "91110108MA1MOCKB01", "OperName": "张三"},
+      {"Name": "企查查科技股份有限公司上海分公司", "CreditCode": "91310115MA1MOCKB02", "OperName": "李四"}
+    ],
+    "ChangeRecords": [
+      {"ChangeDate": "2024-06-01", "ProjectName": "注册资本变更", "BeforeContent": "900万元人民币", "AfterContent": "1000万元人民币"},
+      {"ChangeDate": "2022-11-15", "ProjectName": "经营范围变更", "BeforeContent": "信息技术咨询", "AfterContent": "数据处理服务；企业征信业务"}
+    ],
+    "risk": {
+      "Penalty": [
+        {"DocNo": "苏园市监罚〔2025〕12号", "PenaltyType": "罚款", "Reason": "广告中含有虚假内容",
+         "Content": "罚款 5 万元", "DecisionGov": "苏州工业园区市场监督管理局", "DecisionDate": "2025-03-11"},
+        {"DocNo": "苏园税罚〔2024〕7号", "PenaltyType": "罚款", "Reason": "未按期申报",
+         "Content": "罚款 2000 元", "DecisionGov": "国家税务总局苏州工业园区税务局", "DecisionDate": "2024-02-08"}
+      ],
+      "Exceptions": [
+        {"Reason": "未按规定期限公示年度报告", "AddDate": "2023-07-01", "RemoveDate": "2023-09-01",
+         "DecisionGov": "苏州工业园区市场监督管理局"}
+      ],
+      "ShiXinItems": [
+        {"CaseNo": "(2024)苏0591执1234号", "ExecuteGov": "苏州工业园区人民法院", "Biaodi": "120000",
+         "PublishDate": "2024-05-20", "Performance": "全部未履行", "ExecuteStatus": "执行中"}
+      ],
+      "ZhiXingItems": [
+        {"CaseNo": "(2024)苏0591执1234号", "ExecuteGov": "苏州工业园区人民法院", "Biaodi": "120000", "Liandate": "2024-04-01"},
+        {"CaseNo": "(2024)苏0591执0987号", "ExecuteGov": "苏州市姑苏区人民法院", "Biaodi": "35000", "Liandate": "2024-03-12"},
+        {"CaseNo": "(2023)苏0591执5566号", "ExecuteGov": "苏州工业园区人民法院", "Biaodi": "80000", "Liandate": "2023-11-02"}
+      ],
+      "MPledge": [],
+      "Pledge": [
+        {"Pledgor": "陈德强", "Pledgee": "某商业银行苏州分行", "Amount": "5000000",
+         "Status": "有效", "RegDate": "2024-01-08"}
+      ],
+      "SpotCheck": [
+        {"PlanNo": "苏抽查〔2024〕88号", "Result": "未发现问题", "CheckDate": "2024-08-12",
+         "DecisionGov": "苏州工业园区市场监督管理局"}
+      ],
+      "CompanyTaxCreditItems": [{"Year": "2024", "Level": "A"}, {"Year": "2023", "Level": "A"}],
+      "CompanyProducts": [],
+      "PermissionEciInfo": [],
+      "Liquidation": null
+    },
+    "docs": [
+      {
+        "Id": "doc-88213",
+        "CaseName": "某某网络科技有限公司与企查查科技股份有限公司侵害商标权纠纷一审民事判决书",
+        "CaseReason": "侵害商标权纠纷",
+        "CaseNo": "(2024)苏0591民初1234号",
+        "Amount": "120000",
+        "IsProsecutor": "false",
+        "IsDefendant": "true",
+        "JudgeResult": "驳回原告某某网络科技有限公司的全部诉讼请求。",
+        "JudgeDate": "2024-06-18",
+        "PublishDate": "2024-07-02",
+        "CaseType": "zscq",
+        "PartyList": [
+          {"Name": "某某网络科技有限公司", "RoleType": "原告", "Statement": "不被支持", "Keyno": "qcc-mock-p-1"},
+          {"Name": "企查查科技股份有限公司", "RoleType": "被告", "Statement": "获得支持", "Keyno": "qcc-mock-0001"}
+        ]
+      },
+      {
+        "Id": "doc-88340",
+        "CaseName": "企查查科技股份有限公司与某某数据服务有限公司服务合同纠纷一审民事判决书",
+        "CaseReason": "服务合同纠纷",
+        "CaseNo": "(2024)苏0591民初5566号",
+        "Amount": "350000",
+        "IsProsecutor": "true",
+        "IsDefendant": "false",
+        "JudgeResult": "被告某某数据服务有限公司于本判决生效之日起十日内支付服务费 350000 元。",
+        "JudgeDate": "2024-09-05",
+        "PublishDate": "2024-09-20",
+        "CaseType": "ms",
+        "PartyList": [
+          {"Name": "企查查科技股份有限公司", "RoleType": "原告", "Statement": "获得支持", "Keyno": "qcc-mock-0001"},
+          {"Name": "某某数据服务有限公司", "RoleType": "被告", "Statement": "不被支持", "Keyno": "qcc-mock-p-2"}
+        ]
+      },
+      {
+        "Id": "doc-90112",
+        "CaseName": "某某公司申请执行企查查科技股份有限公司服务合同纠纷执行裁定书",
+        "CaseReason": "服务合同纠纷",
+        "CaseNo": "(2025)苏0591执1234号",
+        "Amount": "120000",
+        "IsProsecutor": "false",
+        "IsDefendant": "true",
+        "JudgeResult": "",
+        "JudgeDate": "2025-02-11",
+        "PublishDate": "2025-03-01",
+        "CaseType": "zx",
+        "PartyList": [
+          {"Name": "某某公司", "RoleType": "申请执行人", "Statement": "", "Keyno": "qcc-mock-p-3"},
+          {"Name": "企查查科技股份有限公司", "RoleType": "被执行人", "Statement": "", "Keyno": "qcc-mock-0001"}
+        ]
+      }
+    ]
+  },
+  {
+    "KeyNo": "qcc-mock-0002",
+    "QccCode": "QCCMOCK0002",
+    "Name": "苏州某某注销贸易有限公司",
+    "No": "320594000000002",
+    "CreditCode": "91320594MA1MOCK002",
+    "Status": "注销",
+    "StartDate": "2016-05-09",
+    "EndDate": "2023-04-11",
+    "OperName": "赵六",
+    "BelongOrg": "苏州市吴中区市场监督管理局",
+    "Province": "江苏省",
+    "RegistCapi": "100万元人民币",
+    "RegisteredCapital": "100",
+    "RegisteredCapitalUnit": "万元",
+    "RegisteredCapitalCCY": "人民币",
+    "RecCap": "100万元人民币",
+    "EconKind": "有限责任公司(自然人独资)",
+    "Address": "苏州市吴中区木渎镇",
+    "Scope": "日用百货销售。",
+    "TermStart": "2016-05-09",
+    "TermEnd": "2036-05-08",
+    "CheckDate": "2023-04-11",
+    "IsOnStock": "0",
+    "InsuredCount": "0",
+    "EntType": "0",
+    "UpdatedDate": "2023-04-11",
+    "Industry": {"Code": "F52", "Name": "零售业"},
+    "Area": {"Province": "江苏省", "City": "苏州市", "District": "吴中区"},
+    "TagList": [],
+    "Partners": [{"Name": "赵六", "StockPercent": "100%", "ShouldCapi": "100", "ShoudDate": "2016-05-09", "InvestType": "自然人股东"}],
+    "Employees": [{"Name": "赵六", "Position": "执行董事兼总经理"}],
+    "Branches": [],
+    "ChangeRecords": [],
+    "ContactInfo": {},
+    "risk": {
+      "Penalty": [], "Exceptions": [], "ShiXinItems": [], "ZhiXingItems": [], "MPledge": [], "Pledge": [],
+      "SpotCheck": [], "CompanyTaxCreditItems": [], "CompanyProducts": [], "PermissionEciInfo": [],
+      "Liquidation": {"Member": "赵六", "Reason": "股东决定解散", "Date": "2023-01-12"}
+    },
+    "docs": []
+  },
+  {
+    "KeyNo": "qcc-mock-0003",
+    "QccCode": "QCCMOCK0003",
+    "Name": "某某吊销建材有限公司",
+    "No": "320594000000003",
+    "CreditCode": "91320594MA1MOCK003",
+    "Status": "吊销，未注销",
+    "StartDate": "2012-09-18",
+    "EndDate": "2020-06-30",
+    "OperName": "孙七",
+    "BelongOrg": "苏州市相城区市场监督管理局",
+    "Province": "江苏省",
+    "RegistCapi": "500万元人民币",
+    "RegisteredCapital": "500",
+    "RegisteredCapitalUnit": "万元",
+    "RegisteredCapitalCCY": "人民币",
+    "EconKind": "有限责任公司",
+    "Address": "苏州市相城区元和街道",
+    "Scope": "建筑材料销售。",
+    "TermStart": "2012-09-18",
+    "TermEnd": "2032-09-17",
+    "CheckDate": "2020-06-30",
+    "IsOnStock": "0",
+    "InsuredCount": "0",
+    "EntType": "0",
+    "UpdatedDate": "2020-07-05",
+    "Industry": {"Code": "F51", "Name": "批发业"},
+    "Area": {"Province": "江苏省", "City": "苏州市", "District": "相城区"},
+    "TagList": [],
+    "Partners": [{"Name": "孙七", "StockPercent": "70%", "ShouldCapi": "350", "ShoudDate": "2012-09-18", "InvestType": "自然人股东"}],
+    "Employees": [{"Name": "孙七", "Position": "执行董事"}],
+    "Branches": [],
+    "ChangeRecords": [],
+    "ContactInfo": {},
+    "risk": {
+      "Penalty": [
+        {"DocNo": "相市监罚〔2019〕45号", "PenaltyType": "吊销营业执照", "Reason": "公司成立后无正当理由超过六个月未开业",
+         "Content": "吊销营业执照", "DecisionGov": "苏州市相城区市场监督管理局", "DecisionDate": "2020-06-30"}
+      ],
+      "Exceptions": [
+        {"Reason": "通过登记的住所无法联系", "AddDate": "2019-11-01", "RemoveDate": "", "DecisionGov": "苏州市相城区市场监督管理局"}
+      ],
+      "ShiXinItems": [
+        {"CaseNo": "(2020)苏0507执88号", "ExecuteGov": "苏州市相城区人民法院", "Biaodi": "260000",
+         "PublishDate": "2020-08-14", "Performance": "全部未履行", "ExecuteStatus": "执行中"},
+        {"CaseNo": "(2020)苏0507执89号", "ExecuteGov": "苏州市相城区人民法院", "Biaodi": "41000",
+         "PublishDate": "2020-09-02", "Performance": "部分未履行", "ExecuteStatus": "执行中"}
+      ],
+      "ZhiXingItems": [],
+      "MPledge": [], "Pledge": [], "SpotCheck": [], "CompanyTaxCreditItems": [],
+      "CompanyProducts": [], "PermissionEciInfo": [], "Liquidation": null
+    },
+    "docs": [
+      {
+        "Id": "doc-70001",
+        "CaseName": "某某供应商与某某吊销建材有限公司买卖合同纠纷执行裁定书",
+        "CaseReason": "买卖合同纠纷",
+        "CaseNo": "(2020)苏0507执88号",
+        "Amount": "260000",
+        "IsProsecutor": "false",
+        "IsDefendant": "true",
+        "JudgeResult": "终结本次执行程序。",
+        "JudgeDate": "2020-08-10",
+        "PublishDate": "2020-08-14",
+        "CaseType": "zx",
+        "PartyList": [
+          {"Name": "某某供应商", "RoleType": "申请执行人", "Statement": "", "Keyno": "qcc-mock-p-4"},
+          {"Name": "某某吊销建材有限公司", "RoleType": "被执行人", "Statement": "", "Keyno": "qcc-mock-0003"}
+        ]
+      }
+    ]
+  },
+  {
+    "KeyNo": "qcc-mock-0004",
+    "QccCode": "QCCMOCK0004",
+    "Name": "QCC MOCK HONG KONG LIMITED",
+    "No": "71234567",
+    "CreditCode": "71234567",
+    "Status": "仍注册",
+    "StartDate": "2019-04-01",
+    "EndDate": null,
+    "OperName": "CHAN TAI MAN",
+    "BelongOrg": "香港公司注册处",
+    "Province": "香港特别行政区",
+    "RegistCapi": "HKD 10000",
+    "RegisteredCapital": "10000",
+    "RegisteredCapitalUnit": "元",
+    "RegisteredCapitalCCY": "港元",
+    "EconKind": "私人股份有限公司",
+    "Address": "UNIT 1001, 10/F, MOCK TOWER, CENTRAL, HONG KONG",
+    "Scope": "Software and data services.",
+    "TermStart": "2019-04-01",
+    "TermEnd": "长期",
+    "CheckDate": "2026-01-15",
+    "IsOnStock": "0",
+    "InsuredCount": "",
+    "EnglishName": "QCC MOCK HONG KONG LIMITED",
+    "EntType": "2",
+    "UpdatedDate": "2026-01-15",
+    "Industry": {"Code": "I65", "Name": "软件和信息技术服务业"},
+    "Area": {"Province": "香港特别行政区", "City": "香港", "District": ""},
+    "TagList": [],
+    "Partners": [],
+    "Employees": [],
+    "Branches": [],
+    "ChangeRecords": [],
+    "ContactInfo": {},
+    "risk": {
+      "Penalty": [], "Exceptions": [], "ShiXinItems": [], "ZhiXingItems": [], "MPledge": [], "Pledge": [],
+      "SpotCheck": [], "CompanyTaxCreditItems": [], "CompanyProducts": [], "PermissionEciInfo": [],
+      "Liquidation": null
+    },
+    "docs": []
+  },
+  {
+    "KeyNo": "qcc-mock-0005",
+    "QccCode": "QCCMOCK0005",
+    "Name": "苏州仅名称匹配测试有限公司",
+    "No": "320594000000005",
+    "CreditCode": "91320594MA1MOCK005",
+    "Status": "存续",
+    "StartDate": "2021-12-01",
+    "OperName": "周八",
+    "BelongOrg": "苏州市市场监督管理局",
+    "Province": "江苏省",
+    "RegistCapi": "10万元人民币",
+    "RegisteredCapital": "10",
+    "RegisteredCapitalUnit": "万元",
+    "RegisteredCapitalCCY": "人民币",
+    "EconKind": "有限责任公司(自然人投资或控股)",
+    "Address": "苏州市姑苏区",
+    "Scope": "技术服务。",
+    "TermStart": "2021-12-01",
+    "TermEnd": "长期",
+    "IsOnStock": "0",
+    "InsuredCount": "2",
+    "EntType": "0",
+    "UpdatedDate": "2026-03-02",
+    "Industry": {"Code": "I65", "Name": "软件和信息技术服务业"},
+    "Area": {"Province": "江苏省", "City": "苏州市", "District": "姑苏区"},
+    "TagList": [],
+    "Partners": [],
+    "Employees": [],
+    "Branches": [],
+    "ChangeRecords": [],
+    "ContactInfo": {},
+    "risk": {
+      "Penalty": [], "Exceptions": [], "ShiXinItems": [], "ZhiXingItems": [], "MPledge": [], "Pledge": [],
+      "SpotCheck": [], "CompanyTaxCreditItems": [], "CompanyProducts": [], "PermissionEciInfo": [],
+      "Liquidation": null
+    },
+    "docs": []
+  }
+]
