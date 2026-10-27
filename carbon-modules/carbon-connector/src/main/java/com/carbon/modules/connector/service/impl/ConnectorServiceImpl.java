@@ -19,8 +19,10 @@ import com.carbon.modules.connector.mapper.ConnectorMapper;
 import com.carbon.modules.connector.mapper.ConnectorOperationMapper;
 import com.carbon.modules.connector.service.IConnectorService;
 import com.carbon.modules.connector.support.AuthConfigCodec;
+import com.carbon.common.core.event.ConnectorAuthChangedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,17 +59,20 @@ public class ConnectorServiceImpl implements IConnectorService {
     private final ConnectorOperationMapper operationMapper;
     private final CryptoService crypto;
     private final TemplateRenderer templateRenderer;
+    private final ApplicationEventPublisher events;
 
     public ConnectorServiceImpl(ConnectorMapper connectorMapper,
                                 ConnectorAuthMapper authMapper,
                                 ConnectorOperationMapper operationMapper,
                                 CryptoService crypto,
-                                TemplateRenderer templateRenderer) {
+                                TemplateRenderer templateRenderer,
+                                ApplicationEventPublisher events) {
         this.connectorMapper = connectorMapper;
         this.authMapper = authMapper;
         this.operationMapper = operationMapper;
         this.crypto = crypto;
         this.templateRenderer = templateRenderer;
+        this.events = events;
     }
 
     @Override
@@ -111,6 +116,7 @@ public class ConnectorServiceImpl implements IConnectorService {
         connectorMapper.insert(entity);
 
         saveAuth(entity.getId(), bo.getAuth(), null);
+        events.publishEvent(ConnectorAuthChangedEvent.of(entity.getId()));
         log.info("连接器创建成功 id={} code={}", entity.getId(), entity.getCode());
         return entity.getId();
     }
@@ -128,6 +134,8 @@ public class ConnectorServiceImpl implements IConnectorService {
         connectorMapper.updateById(entity);
 
         saveAuth(id, bo.getAuth(), findAuth(id));
+        // 鉴权可能变了：让运行时丢掉缓存里的 token（否则改完密钥还要等最长 1 小时才生效）
+        events.publishEvent(ConnectorAuthChangedEvent.of(id));
         log.info("连接器更新成功 id={} code={}", id, entity.getCode());
     }
 
@@ -141,6 +149,7 @@ public class ConnectorServiceImpl implements IConnectorService {
         authMapper.delete(new LambdaQueryWrapper<ConnectorAuth>().in(ConnectorAuth::getConnectorId, ids));
         operationMapper.delete(new LambdaQueryWrapper<ConnectorOperation>().in(ConnectorOperation::getConnectorId, ids));
         connectorMapper.deleteByIds(ids);
+        ids.forEach(id -> events.publishEvent(ConnectorAuthChangedEvent.of(id)));
         log.info("连接器删除成功 ids={}", ids);
     }
 
