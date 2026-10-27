@@ -18,6 +18,15 @@
     <description>唯一可执行模块：装配所有业务模块并启动（不写业务逻辑）。</description>
 
     <dependencies>
+        <!-- 数据库版本化迁移：script/sql/carbon.sql 为母本 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <!-- 基础设施 -->
         <dependency>
             <groupId>com.carbon</groupId>

@@ -23,6 +23,10 @@
         <dependency>
             <groupId>com.carbon</groupId>
             <artifactId>carbon-common-mybatis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.carbon</groupId>
+      <artifactId>carbon-common-json</artifactId>
         </dependency>
         <dependency>
             <groupId>com.carbon</groupId>
@@ -35,6 +39,10 @@
         <dependency>
             <groupId>com.carbon</groupId>
             <artifactId>carbon-framework-expression</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
         </dependency>
     </dependencies>
 

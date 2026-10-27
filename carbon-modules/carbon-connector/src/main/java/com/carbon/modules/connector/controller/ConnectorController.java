@@ -1,0 +1,83 @@
+package com.carbon.modules.connector.controller;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.carbon.common.core.domain.PageQuery;
+import com.carbon.common.core.domain.R;
+import com.carbon.common.core.domain.TableDataInfo;
+import com.carbon.common.web.domain.BaseController;
+import com.carbon.modules.connector.domain.bo.ConnectorBo;
+import com.carbon.modules.connector.domain.vo.ConnectorVo;
+import com.carbon.modules.connector.service.IConnectorService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 连接器管理接口。
+ *
+ * <p>路径前缀 {@code /api/connectors}；所有响应体都是 {@code R<T>}，
+ * 分页数据包在 {@code R<TableDataInfo<T>>} 里（前端表格组件直接吃 {@code total/rows}）。
+ *
+ * @author carbon
+ */
+@RestController
+@RequestMapping("/api/connectors")
+public class ConnectorController extends BaseController {
+
+    private static final Set<String> SORTABLE = Set.copyOf(IConnectorService.SORTABLE);
+
+    private final IConnectorService connectorService;
+
+    public ConnectorController(IConnectorService connectorService) {
+        this.connectorService = connectorService;
+    }
+
+    @GetMapping
+    public R<TableDataInfo<ConnectorVo>> page(PageQuery pageQuery,
+                                              @RequestParam(required = false) String category,
+                                              @RequestParam(required = false) Integer status,
+                                              @RequestParam(required = false) String keyword) {
+        // toPage 只用于校验排序列白名单；真正的分页参数在 service 内部按 safePage* 归一
+        toPage(pageQuery, SORTABLE);
+        IPage<ConnectorVo> page = connectorService.page(pageQuery, category, status, keyword);
+        return R.ok(toTable(page));
+    }
+
+    @GetMapping("/{id}")
+    public R<ConnectorVo> detail(@PathVariable Long id) {
+        return R.ok(connectorService.detail(id));
+    }
+
+    @PostMapping
+    public R<Long> create(@Valid @RequestBody ConnectorBo bo) {
+        return R.ok(connectorService.create(bo));
+    }
+
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody ConnectorBo bo) {
+        connectorService.update(id, bo);
+        return R.ok();
+    }
+
+    @DeleteMapping
+    public R<Void> delete(@RequestBody List<Long> ids) {
+        connectorService.delete(ids);
+        return R.ok();
+    }
+
+    @PutMapping("/{id}/status")
+    public R<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+        connectorService.updateStatus(id, status);
+        return R.ok();
+    }
+}

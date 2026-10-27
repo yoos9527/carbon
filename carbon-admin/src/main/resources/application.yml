@@ -27,6 +27,12 @@ spring:
       max-request-size: 20MB
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  flyway:
+    enabled: true
+    # 表结构与 docs/02-数据模型.md 同步的母本 = script/sql/carbon.sql
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: false
 
 # MyBatis-Plus：约定优先，业务侧只写 XML 或 Wrapper
 mybatis-plus:
@@ -38,8 +44,8 @@ mybatis-plus:
     banner: false
     db-config:
       id-type: assign_id          # 雪花 ID
-      logic-delete-field: delFlag
-      logic-delete-value: 2
+      logic-delete-field: deleted
+      logic-delete-value: 1
       logic-not-delete-value: 0
 
 management:
