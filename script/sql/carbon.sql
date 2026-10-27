@@ -127,7 +127,7 @@ CREATE TABLE flow_run (
   trace_id     VARCHAR(32)  NOT NULL,
   flow_id      BIGINT       NOT NULL,
   version      INT          NOT NULL,
-  trigger_type VARCHAR(16)  NOT NULL COMMENT 'manual|cron|gw|webhook',
+  trigger_type VARCHAR(16)  NOT NULL COMMENT 'manual|job|gw|webhook',
   trigger_by   VARCHAR(128) NULL    COMMENT 'appKey / job 名 / 手工操作者',
   status       VARCHAR(16)  NOT NULL COMMENT 'RUNNING|SUCCESS|PARTIAL|FAILED',
   input        JSON         NULL,
