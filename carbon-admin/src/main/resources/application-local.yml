@@ -14,7 +14,7 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3307/carbon?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    url: jdbc:mysql://192.168.1.6:3307/carbon?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
     username: root
     password: carbon
     hikari:
@@ -27,7 +27,7 @@ spring:
 
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.1.6
       port: 6379
       database: 15
       # 宿主机 Redis 的口令；本机如果没设口令，这两个写法等价（空串即无密码）。
