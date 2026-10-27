@@ -27,6 +27,9 @@ spring:
       max-request-size: 20MB
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  # Quartz 不在这里配：Spring Boot 的 Quartz 自动配置在 initialize-schema=never 时
+  # 拿不到 DataSource（启动即 SchedulerConfigException: DataSource name not set），
+  # 因此改由 com.carbon.modules.job.config.QuartzConfig 显式装配，配置只留那一处。
   flyway:
     enabled: true
     # 表结构与 docs/02-数据模型.md 同步的母本 = script/sql/carbon.sql

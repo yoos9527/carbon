@@ -24,6 +24,23 @@
             <groupId>com.carbon</groupId>
             <artifactId>carbon-common-mybatis</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-common-redis</artifactId>
+        </dependency>
+        <!-- Quartz：JDBC JobStore + 集群。表结构见 db/migration/V4 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-quartz</artifactId>
+        </dependency>
     </dependencies>
 
 </project>
