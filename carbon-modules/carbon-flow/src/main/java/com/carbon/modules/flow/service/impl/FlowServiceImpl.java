@@ -62,6 +62,9 @@ public class FlowServiceImpl implements IFlowService {
             wrapper.eq("status", status);
         }
         wrapper.orderByDesc("updated_at");
+        // 列表不回传 draftDsl：那是整张图的 JSON（几十 KB 起步），
+        // 一页 10 条就多几百 KB 流量，而列表页只需要名字与版本。
+        wrapper.select(Flow.class, field -> !"draft_dsl".equals(field.getColumn()));
         return flowMapper.selectPage(new Page<>(pageQuery.safePageNum(), pageQuery.safePageSize()), wrapper);
     }
 
