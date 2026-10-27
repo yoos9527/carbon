@@ -22,6 +22,7 @@ public enum GwErrorCode {
     APP_FORBIDDEN("403", 403, "应用无权调用该连接器"),
     CONNECTOR_NOT_FOUND("4404", 404, "连接器不存在或已停用"),
     OPERATION_NOT_FOUND("4405", 404, "接口不存在或已停用"),
+    FLOW_NOT_FOUND("4406", 404, "流程不存在或未发布"),
     RATE_LIMITED("4029", 429, "调用频率超限"),
     PROVIDER_TIMEOUT("5504", 504, "三方服务超时"),
     PROVIDER_HTTP_4XX("5402", 502, "三方服务返回 4xx"),
@@ -67,6 +68,7 @@ public enum GwErrorCode {
             case RATE_LIMITED -> RATE_LIMITED;
             case CONNECTOR_NOT_FOUND -> CONNECTOR_NOT_FOUND;
             case OPERATION_NOT_FOUND -> OPERATION_NOT_FOUND;
+            case FLOW_NOT_FOUND -> FLOW_NOT_FOUND;
             case AUTH_FAILED -> AUTH_FAILED;
             case PROVIDER_TIMEOUT -> PROVIDER_TIMEOUT;
             case PROVIDER_HTTP_4XX -> PROVIDER_HTTP_4XX;

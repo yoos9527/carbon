@@ -49,6 +49,9 @@ public class ConnectorServiceImpl implements IConnectorService {
 
     private static final Logger log = LoggerFactory.getLogger(ConnectorServiceImpl.class);
 
+    /** 网关已占用的首段路径字面量，连接器编码不能与之同义 */
+    private static final List<String> RESERVED_GATEWAY_CODES = List.of("flows", "health");
+
     private final ConnectorMapper connectorMapper;
     private final ConnectorAuthMapper authMapper;
     private final ConnectorOperationMapper operationMapper;
@@ -208,9 +211,22 @@ public class ConnectorServiceImpl implements IConnectorService {
         return counts;
     }
 
+    @Override
+    public List<Connector> listEnabled() {
+        return connectorMapper.selectList(new LambdaQueryWrapper<Connector>()
+                .eq(Connector::getStatus, 1)
+                .orderByAsc(Connector::getCode));
+    }
+
     // ------------------------------------------------------------------ 内部方法
 
     private void assertCodeAvailable(String code, Long excludeId) {
+        // 网关有两个字面量路径段（/gw/flows/** 与 /gw/health），连接器编码叫这两个名字
+        // 会被 Spring 的「字面量优先」规则抢走，接口永远调不到。
+        // 报在保存时而不是等人踩坑后去猜「为什么 404」。
+        if (RESERVED_GATEWAY_CODES.contains(code)) {
+            throw ServiceException.param("编码不能用保留字：" + code.toLowerCase() + "（已被网关占用）");
+        }
         LambdaQueryWrapper<Connector> wrapper = new LambdaQueryWrapper<Connector>()
                 .eq(Connector::getCode, code);
         if (excludeId != null) {

@@ -66,4 +66,12 @@ public interface IConnectorService {
 
     /** 连接器下的接口数量，列表页展示用 */
     Map<Long, Integer> countOperations(List<Long> connectorIds);
+
+    /**
+     * 全部启用的连接器（不分页）。
+     *
+     * <p>只给网关的 OpenAPI 文档生成用：那是一份「对外能力清单」，
+     * 分页反而会把文档切成几段。
+     */
+    List<Connector> listEnabled();
 }

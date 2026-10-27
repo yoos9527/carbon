@@ -20,6 +20,11 @@
             <groupId>com.carbon</groupId>
             <artifactId>carbon-engine</artifactId>
         </dependency>
+        <!-- 编排入口 /gw/flows/{flowCode} 要跑流程；engine 与 flow 无循环依赖 -->
+        <dependency>
+            <groupId>com.carbon</groupId>
+            <artifactId>carbon-flow</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.carbon</groupId>
             <artifactId>carbon-common-web</artifactId>

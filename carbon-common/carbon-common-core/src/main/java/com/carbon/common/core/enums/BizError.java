@@ -32,6 +32,8 @@ public enum BizError {
 
     PROVIDER_TIMEOUT(504),
     FLOW_TIMEOUT(504),
+    /** 网关编排入口：流程不存在、已停用或尚未发布 */
+    FLOW_NOT_FOUND(404),
 
     /** Groovy 脚本编译失败、执行抛异常或超时 */
     SCRIPT_ERROR(500),

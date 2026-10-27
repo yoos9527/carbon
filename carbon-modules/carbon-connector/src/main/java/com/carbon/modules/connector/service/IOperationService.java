@@ -27,4 +27,9 @@ public interface IOperationService {
     void update(Long connectorId, Long id, OperationBo bo);
 
     void delete(Long connectorId, List<Long> ids);
+
+    /**
+     * 连接器下全部启用的接口（不分页），只给网关 OpenAPI 文档生成用。
+     */
+    List<ConnectorOperation> listEnabled(Long connectorId);
 }

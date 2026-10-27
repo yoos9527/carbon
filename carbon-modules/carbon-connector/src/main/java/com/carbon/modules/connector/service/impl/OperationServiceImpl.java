@@ -124,6 +124,14 @@ public class OperationServiceImpl implements IOperationService {
         log.info("接口删除成功 connectorId={} ids={}", connectorId, ids);
     }
 
+    @Override
+    public List<ConnectorOperation> listEnabled(Long connectorId) {
+        return operationMapper.selectList(new LambdaQueryWrapper<ConnectorOperation>()
+                .eq(ConnectorOperation::getConnectorId, connectorId)
+                .eq(ConnectorOperation::getStatus, 1)
+                .orderByAsc(ConnectorOperation::getCode));
+    }
+
     // ------------------------------------------------------------------ 内部方法
 
     private ConnectorOperation requireOwned(Long connectorId, Long id) {

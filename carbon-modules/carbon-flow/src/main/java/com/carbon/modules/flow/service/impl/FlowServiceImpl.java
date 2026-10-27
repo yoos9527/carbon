@@ -4,12 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.carbon.common.core.domain.PageQuery;
+import com.carbon.common.core.enums.BizError;
 import com.carbon.common.core.exception.ServiceException;
 import com.carbon.framework.dag.compiler.CompiledFlow;
 import com.carbon.framework.dag.compiler.ElCompiler;
 import com.carbon.framework.dag.dsl.DagDsl;
+import com.carbon.framework.dag.dsl.node.CallNode;
+import com.carbon.framework.dag.dsl.node.NodeDef;
 import com.carbon.framework.dag.registry.ChainRegistry;
 import com.carbon.framework.dag.validator.ValidationError;
+import com.carbon.modules.connector.service.IConnectorService;
 import com.carbon.modules.flow.domain.bo.FlowBo;
 import com.carbon.modules.flow.domain.entity.Flow;
 import com.carbon.modules.flow.domain.entity.FlowVersion;
@@ -24,7 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -46,10 +52,13 @@ public class FlowServiceImpl implements IFlowService {
 
     private final FlowMapper flowMapper;
     private final FlowVersionMapper versionMapper;
+    private final IConnectorService connectorService;
 
-    public FlowServiceImpl(FlowMapper flowMapper, FlowVersionMapper versionMapper) {
+    public FlowServiceImpl(FlowMapper flowMapper, FlowVersionMapper versionMapper,
+                          IConnectorService connectorService) {
         this.flowMapper = flowMapper;
         this.versionMapper = versionMapper;
+        this.connectorService = connectorService;
     }
 
     @Override
@@ -213,6 +222,58 @@ public class FlowServiceImpl implements IFlowService {
         flowMapper.updateById(flow);
         log.info("[flow] 回滚 {} v{} → v{}（operator={}）", flow.getCode(), from, version, operator);
         return target;
+    }
+
+    @Override
+    public Flow requirePublishedByCode(String code) {
+        if (code == null || code.isBlank()) {
+            throw new ServiceException(BizError.FLOW_NOT_FOUND, "流程编码不能为空");
+        }
+        Flow flow = flowMapper.selectOne(new QueryWrapper<Flow>().eq("code", code));
+        // 「不存在」与「未发布」对外必须同一个错：否则网关就成了一个画布探测工具
+        if (flow == null || flow.getStatus() == null || flow.getStatus() == 0) {
+            throw new ServiceException(BizError.FLOW_NOT_FOUND, "流程不存在或已停用：" + code);
+        }
+        if (flow.getPublishedVersion() == null) {
+            throw new ServiceException(BizError.FLOW_NOT_FOUND, "流程尚未发布：" + code);
+        }
+        return flow;
+    }
+
+    @Override
+    public Set<Long> publishedConnectorIds(Long flowId) {
+        Integer version = detail(flowId).getPublishedVersion();
+        if (version == null) {
+            return Set.of();
+        }
+        FlowVersion snapshot = versionMapper.selectOne(new QueryWrapper<FlowVersion>()
+                .eq("flow_id", flowId)
+                .eq("version", version));
+        if (snapshot == null) {
+            // 版本快照丢了比白名单为空更危险（=不限），所以抛错而不是静默放行
+            throw new ServiceException("流程版本快照缺失：flowId=" + flowId + " v" + version);
+        }
+        Set<Long> ids = new LinkedHashSet<>();
+        for (NodeDef node : FlowDsls.parse(snapshot.getDsl()).nodes()) {
+            if (node instanceof CallNode call) {
+                try {
+                    ids.add(connectorService.requireByCode(call.connector()).getId());
+                } catch (RuntimeException ignored) {
+                    // 连接器已被删：不参与白名单，调用时自然会报 CONNECTOR_NOT_FOUND
+                }
+            }
+        }
+        return ids;
+    }
+
+    @Override
+    public List<Flow> listPublished() {
+        return flowMapper.selectList(new QueryWrapper<Flow>()
+                .eq("status", 1)
+                .isNotNull("published_version")
+                // 文档里只需要 code/name，整张图 JSON 不该出现在接口清单里
+                .select("id", "code", "name", "published_version")
+                .orderByAsc("code"));
     }
 
     private int nextVersion(Long flowId) {
