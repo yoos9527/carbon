@@ -76,3 +76,21 @@ logging:
     root: info
     com.carbon: debug
     org.springframework.web: info
+
+# 调用日志写入与保留（实现见 AsyncLogWriter / LogPartitionManager）。
+# 默认值在代码里也有，这里列出来是为了让部署时能一眼看到这些旋钮，而不是去翻源码。
+platform:
+  log:
+    # ≤0 表示永不清理，只维护分区
+    retention-days: 30
+    async-queue-capacity: 10000
+    async-batch-size: 200
+    async-flush-interval-ms: 1000
+    partition:
+      enabled: true
+      # 提前建好未来 2 个月，保证跨月当天一定有分区
+      ahead-months: 2
+      cleanup-batch-size: 5000
+      cleanup-max-batches: 20
+      cron: "0 10 3 * * ?"
+      maintain-on-startup: true

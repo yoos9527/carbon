@@ -3,6 +3,7 @@ package com.carbon.modules.invokelog.writer;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.carbon.common.json.JsonUtils;
 import com.carbon.modules.invokelog.api.InvokeLogEvent;
+import com.carbon.modules.invokelog.config.LogProperties;
 import com.carbon.modules.invokelog.api.InvokeLogSink;
 import com.carbon.modules.invokelog.domain.entity.InvokeLog;
 import com.carbon.modules.invokelog.mapper.InvokeLogMapper;
@@ -27,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li><b>调用线程绝不落库</b>：三方调用的 P99 会被数据库抖动直接污染，所以引擎线程只做
  *       {@code offer}，满了就丢弃并计数——丢日志是可接受的运维事故，拖慢业务不是。</li>
  *   <li><b>攒批</b>：一条 insert 一次往返，QPS 上百时数据库光在网络往返上就忙不过来；
- *       攒到 {@value #BATCH_SIZE} 条或满 {@value #FLUSH_INTERVAL_MS}ms 就写一批。</li>
+ *       攒到 {@code platform.log.async-batch-size} 条或满 {@code platform.log.async-flush-interval-ms} 就写一批。</li>
  *   <li><b>写入失败不重试</b>：重试会把队头堵住，进而把后面所有日志一起拖垮。
  *       失败计数暴露出去，让运维用 {@code dropped} 这个指标判断要不要扩容/调批次。</li>
  * </ol>
@@ -39,20 +40,21 @@ public class AsyncLogWriter implements InvokeLogSink {
 
     private static final Logger log = LoggerFactory.getLogger(AsyncLogWriter.class);
 
-    /** 队列容量：按 10k 估算，单条日志均值 2KB 时约占 20MB 堆 */
-    private static final int QUEUE_CAPACITY = 10_000;
-    private static final int BATCH_SIZE = 200;
-    private static final long FLUSH_INTERVAL_MS = 1_000L;
-
-    private final BlockingQueue<InvokeLogEvent> queue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+    private final BlockingQueue<InvokeLogEvent> queue;
     private final InvokeLogMapper logMapper;
+    private final int batchSize;
 
     private final AtomicLong dropped = new AtomicLong();
     private final AtomicLong written = new AtomicLong();
     private final AtomicLong failed = new AtomicLong();
 
-    public AsyncLogWriter(InvokeLogMapper logMapper) {
+    public AsyncLogWriter(InvokeLogMapper logMapper, LogProperties properties) {
         this.logMapper = logMapper;
+        // 容量/批次来自 platform.log.*（默认 10k 条 / 200 条一批），按单条日志均值 2KB
+        // 估算 10k 条约占 20MB 堆。写成配置是因为「队列该多大」取决于部署内存与峰值 QPS，
+        // 不是一个能拍死的常数。
+        this.queue = new ArrayBlockingQueue<>(Math.max(1, properties.getAsyncQueueCapacity()));
+        this.batchSize = Math.max(1, properties.getAsyncBatchSize());
     }
 
     @Override
@@ -61,7 +63,7 @@ public class AsyncLogWriter implements InvokeLogSink {
             long total = dropped.incrementAndGet();
             // 每丢 1000 条打一次，避免队列打满时日志本身把磁盘打满
             if (total % 1000 == 1) {
-                log.warn("调用日志队列已满，累计丢弃 {} 条（队列容量 {}）", total, QUEUE_CAPACITY);
+                log.warn("调用日志队列已满，累计丢弃 {} 条（队列容量 {}）", total, queue.size() + queue.remainingCapacity());
             }
         }
     }
@@ -70,13 +72,13 @@ public class AsyncLogWriter implements InvokeLogSink {
      * 定时刷盘。{@code fixedDelay} 而不是 {@code fixedRate}：上一批慢了就让它慢，
      * 不要用并发的多个批次把数据库压得更死。
      */
-    @Scheduled(fixedDelay = FLUSH_INTERVAL_MS)
+    @Scheduled(fixedDelayString = "${platform.log.async-flush-interval-ms:1000}")
     public void flush() {
         if (queue.isEmpty()) {
             return;
         }
-        List<InvokeLogEvent> batch = new ArrayList<>(BATCH_SIZE);
-        queue.drainTo(batch, BATCH_SIZE);
+        List<InvokeLogEvent> batch = new ArrayList<>(batchSize);
+        queue.drainTo(batch, batchSize);
         if (batch.isEmpty()) {
             return;
         }
