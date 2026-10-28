@@ -48,7 +48,7 @@ public class FlowServiceImpl implements IFlowService {
             {"version":1,"nodes":[
               {"type":"START","id":"start"},
               {"type":"END","id":"end"}
-            ],"edges":[{"from":"start","to":"end"}]}""";
+            ],"edges":[{"source":"start","target":"end"}]}""";
 
     private final FlowMapper flowMapper;
     private final FlowVersionMapper versionMapper;
