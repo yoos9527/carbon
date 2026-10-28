@@ -257,7 +257,7 @@ onMounted(async () => {
   if (typeof route.query.status === "string") query.status = route.query.status;
   await loadFlows();
   await load();
-  // 深链：/flow/runs?runId=xxx 直接打开详情（日志页「查看编排步骤」用这个）
+  // 深链：/flow-runs?runId=xxx 直接打开详情（日志页「查看编排步骤」用这个）
   if (typeof route.query.runId === "string") openDetail(route.query.runId);
 });
 </script>
@@ -308,7 +308,7 @@ onMounted(async () => {
             link
             type="primary"
             @click="
-              router.push({ path: '/flow/runs', query: { flowId: row.flowId } })
+              router.push({ path: '/flow-runs', query: { flowId: row.flowId } })
             "
           >
             {{ flowName(row.flowId) }}

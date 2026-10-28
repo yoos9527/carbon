@@ -2,10 +2,10 @@ import { API_BASE, http, type TableDataInfo } from "@/utils/http";
 import type { PageQuery } from "@/api/common";
 
 /**
- * 流程（编排）与运行记录。
+ * 流程（编排）、版本与运行记录。
  *
- * 只读：画布/发布/试跑在 P2 的画布页里做，这里只服务「运行记录」列表与详情。
- * `draftDsl` 是整张图的 JSON（几十 KB 起），列表页**不请求**也不显示。
+ * `draftDsl` 是整张图的 JSON（几十 KB 起）：列表接口不返回、列表页也不显示，
+ * 只有画布页才 `GET /flows/{id}` 取它。列表里能用的只有 code/name/publishedVersion。
  */
 
 export interface Flow {
@@ -17,6 +17,41 @@ export interface Flow {
   status: number;
   createdAt?: string;
   updatedAt?: string;
+  /** 只有 GET /flows/{id} 才有 */
+  draftDsl?: string;
+}
+
+/** 版本快照（对应后端 FlowVersion）：发布后不可变 */
+export interface FlowVersion {
+  id: string;
+  flowId: string;
+  version: number;
+  dsl: string;
+  publishedBy?: string;
+  publishedAt?: string;
+}
+
+/**
+ * 校验错误。
+ *
+ * `nodeId` 是画布定位的关键：没有它，用户看到「条件表达式不合法」只能自己满图找。
+ */
+export interface ValidationError {
+  code: string;
+  message: string;
+  nodeId?: string;
+  edgeSource?: string;
+  edgeTarget?: string;
+}
+
+/** 同步试跑结果（POST /flows/{id}/run） */
+export interface FlowRunResult {
+  runId?: string;
+  status?: string;
+  output?: Record<string, unknown>;
+  steps?: Array<FlowStepRun>;
+  error?: string;
+  durationMs?: number;
 }
 
 /** 运行记录（对应后端 FlowRun 实体） */
@@ -145,6 +180,69 @@ export function pageFlows(
 
 export function getFlow(id: string) {
   return http.get<Flow>(`/flows/${id}`);
+}
+
+/* ---------- 写操作 ---------- */
+
+/** 新建：`draftDsl` 允许不合法（草稿就是改到一半的状态） */
+export function createFlow(body: {
+  code: string;
+  name: string;
+  draftDsl?: string;
+  status?: number;
+}) {
+  return http.post<Flow>("/flows", body);
+}
+
+export function updateFlow(
+  id: string,
+  body: {
+    code: string;
+    name: string;
+    draftDsl?: string;
+    status?: number;
+  }
+) {
+  return http.put<Flow>(`/flows/${id}`, body);
+}
+
+export function deleteFlow(id: string) {
+  return http.delete<void>(`/flows/${id}`);
+}
+
+/** 校验草稿：返回**全部**错误，画布据此逐条定位 */
+export function validateFlowDsl(dsl: string) {
+  return http.post<Array<ValidationError>>("/flows/validate", { dsl });
+}
+
+/** 发布当前草稿，生成不可变版本快照 */
+export function publishFlow(id: string, operator = "anonymous") {
+  return http.post<FlowVersion>(`/flows/${id}/publish`, undefined, {
+    params: { operator }
+  });
+}
+
+export function listFlowVersions(id: string) {
+  return http.get<Array<FlowVersion>>(`/flows/${id}/versions`);
+}
+
+/** 回滚：指针回退 + 草稿同步（草稿会被覆盖成该版本，前端必须二次确认） */
+export function rollbackFlow(id: string, version: number, operator = "anonymous") {
+  return http.post<FlowVersion>(
+    `/flows/${id}/rollback`,
+    { version },
+    { params: { operator } }
+  );
+}
+
+/** 同步试跑已发布版本（跑完才返回，适合秒级流程） */
+export function runFlow(id: string, input: Record<string, unknown> = {}) {
+  return http.post<FlowRunResult>(`/flows/${id}/run`, input);
+}
+
+/** 异步试跑：立刻返回 RUNNING 的运行记录，拿 id 去连 SSE 看进度 */
+export function runFlowAsync(id: string, input: Record<string, unknown> = {}) {
+  return http.post<FlowRun>(`/flows/${id}/run-async`, input);
 }
 
 export function pageFlowRuns(

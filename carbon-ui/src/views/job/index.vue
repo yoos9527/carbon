@@ -286,7 +286,7 @@ onMounted(async () => {
           <el-button
             link
             type="primary"
-            @click="router.push(`/flow/runs?flowId=${row.flowId}`)"
+            @click="router.push(`/flow-runs?flowId=${row.flowId}`)"
           >
             {{ flowName(row.flowId) }}
           </el-button>

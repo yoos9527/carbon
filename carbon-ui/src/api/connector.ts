@@ -36,6 +36,8 @@ export interface Operation {
   postScript?: string;
   scriptTimeoutMs?: number;
   timeoutMs?: number;
+  /** JSON，null 表示继承连接器（后端 OperationVo.retry） */
+  retry?: Record<string, unknown>;
   status: number;
 }
 

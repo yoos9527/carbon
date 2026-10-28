@@ -88,10 +88,10 @@ const counts = computed(() => {
       value: c.operations,
       to: "/connectors"
     },
-    { key: "flows", label: "流程", value: c.flows, to: "/flow/runs" },
+    { key: "flows", label: "流程", value: c.flows, to: "/flow-runs" },
     { key: "apps", label: "应用", value: c.apps },
     { key: "jobs", label: "调度任务", value: c.jobs, to: "/jobs" },
-    { key: "runs", label: "运行中", value: c.runningRuns, to: "/flow/runs" }
+    { key: "runs", label: "运行中", value: c.runningRuns, to: "/flow-runs" }
   ];
 });
 

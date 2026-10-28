@@ -442,7 +442,7 @@ onMounted(async () => {
                 type="primary"
                 @click="
                   router.push({
-                    path: '/flow/runs',
+                    path: '/flow-runs',
                     query: { runId: summary.flowRunId }
                   })
                 "

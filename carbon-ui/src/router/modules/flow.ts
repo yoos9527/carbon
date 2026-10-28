@@ -6,17 +6,35 @@ export default {
   component: Layout,
   meta: {
     icon: "ep/share",
-    title: "编排",
+    title: "流程编排",
     rank: 2
   },
   children: [
     {
-      // 画布页（P2）挂在 /flow/:id/design，这里先只给运行记录
-      path: "/flow/runs",
-      name: "FlowRunList",
-      component: () => import("@/views/flow/runs.vue"),
+      path: "/flows",
+      name: "FlowList",
+      component: () => import("@/views/flow/index.vue"),
       meta: {
-        title: "运行记录"
+        title: "流程列表"
+      }
+    },
+    {
+      path: "/flows/design/:id",
+      name: "FlowDesign",
+      component: () => import("@/views/flow/design.vue"),
+      meta: {
+        title: "编排设计器",
+        // 画布是全屏工作台，必须独占视口，所以不进菜单
+        showLink: false
+      }
+    },
+    {
+      path: "/flows/:id/versions",
+      name: "FlowVersions",
+      component: () => import("@/views/flow/versions.vue"),
+      meta: {
+        title: "版本历史",
+        showLink: false
       }
     }
   ]

@@ -241,7 +241,7 @@ onMounted(load);
           <el-button
             link
             type="primary"
-            @click="router.push(`/connectors/${row.id}/operations`)"
+            @click="router.push(`/services?connectorId=${row.id}`)"
           >
             接口
           </el-button>
