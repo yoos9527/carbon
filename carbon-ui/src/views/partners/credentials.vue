@@ -35,75 +35,124 @@ const partner = ref<Partner | null>(null);
 const rows = ref<Array<Credential>>([]);
 const loading = ref(false);
 
-/** 每种凭证类型的字段定义：secret 的走加密，其余明文存（便于排障） */
-interface FieldDef {
-  key: string;
-  label: string;
-  secret?: boolean;
-  placeholder?: string;
-  /** select 类型：有 options 就渲染下拉 */
-  options?: Array<{ value: string; label: string }>;
-  hint?: string;
-}
+/**
+ * 两种凭证：
+ * - header：静态列若干条请求头/查询参数，值是密钥，逐条加密；
+ * - script：一段 Groovy 算出这次要加什么头，脚本里用到的密钥放在 secrets 里单独加密。
+ */
+type HeaderRow = { name: string; value: string; in: "header" | "query" };
 
-const FIELDS: Record<string, Array<FieldDef>> = {
-  none: [],
-  api_key: [
-    { key: "value", label: "密钥值", secret: true, placeholder: "三方分配的 key" },
-    { key: "name", label: "Header 名", placeholder: "默认 X-Api-Key" },
-    {
-      key: "in",
-      label: "注入位置",
-      options: [
-        { value: "header", label: "Header" },
-        { value: "query", label: "Query 参数" }
-      ],
-      hint: "query 型用于把 key 拼在 URL 上的供应商"
-    }
-  ],
-  basic: [
-    { key: "username", label: "用户名" },
-    { key: "password", label: "密码", secret: true }
-  ],
-  bearer: [
-    { key: "token", label: "Token", secret: true, placeholder: "静态 token" }
-  ],
-  oauth2_cc: [
-    { key: "tokenUrl", label: "Token 地址", placeholder: "https://.../oauth/token" },
-    { key: "clientId", label: "Client ID" },
-    { key: "clientSecret", label: "Client Secret", secret: true },
-    { key: "scope", label: "Scope", placeholder: "可留空" },
-    { key: "tokenField", label: "Token 字段", placeholder: "默认 access_token" },
-    {
-      key: "ttlSeconds",
-      label: "兜底有效期(秒)",
-      placeholder: "默认 3600，接口返回 expires_in 时以它为准"
-    }
-  ],
-  login_token: [
-    { key: "loginUrl", label: "登录地址", placeholder: "https://.../login" },
-    {
-      key: "method",
-      label: "登录方法",
-      options: [
-        { value: "POST", label: "POST" },
-        { value: "GET", label: "GET" }
-      ]
-    },
-    { key: "username", label: "用户名" },
-    { key: "password", label: "密码", secret: true },
-    { key: "headers", label: "登录附加头", placeholder: '{"X-App":"carbon"}' },
-    { key: "body", label: "登录请求体", placeholder: '{"account":"..."}' },
-    { key: "tokenJsonpath", label: "Token 路径", placeholder: "默认 $.access_token" },
-    { key: "headerName", label: "注入 Header", placeholder: "默认 Authorization" },
-    { key: "tokenPrefix", label: "前缀", placeholder: '默认 "Bearer "' }
-  ]
-};
+const headerRows = ref<Array<HeaderRow>>([]);
+const secretRows = ref<Array<{ key: string; value: string }>>([]);
+const scriptText = ref("");
+const scriptTtl = ref("");
+const scriptSensitive = ref("");
 
 const typeOptions = CREDENTIAL_TYPES;
 
-function fieldsOf(type: string): Array<FieldDef> {
-  return FIELDS[type] ?? [];
+const SAMPLE_SCRIPT = [
+  "// 可用变量：ctx.secrets（明文密钥）、ctx.http（get/postForm/postJson）、",
+  "// utils（json / jsonparse / jsonpath / hmacSha256 / md5 / sha256 / base64 / urlEncode）、log(...)",
+  "// 结果写到 ctx.headers / ctx.queryParams；需要缓存就设 ctx.ttlSeconds",
+  "def resp = ctx.http.postForm('https://api.example.com/oauth/token', null, [",
+  "  grant_type: 'client_credentials',",
+  "  client_id: ctx.secrets.clientId,",
+  "  client_secret: ctx.secrets.clientSecret",
+  "])",
+  "if (resp.status != 200) {",
+  "  throw new IllegalStateException('换 token 失败：HTTP ' + resp.status + ' ' + resp.body)",
+  "}",
+  "def token = resp.json?.access_token",
+  "if (!token) { throw new IllegalStateException('响应里没有 access_token') }",
+  "ctx.headers['Authorization'] = 'Bearer ' + token",
+  "ctx.ttlSeconds = 3600",
+  ""
+].join("\n");
+
+function insertSampleScript() {
+  if (scriptText.value.trim()) {
+    scriptText.value += "\n";
+  }
+  scriptText.value += SAMPLE_SCRIPT;
+}
+
+function addHeaderRow() {
+  headerRows.value.push({ name: "", value: "", in: "header" });
+}
+
+function removeHeaderRow(index: number) {
+  headerRows.value.splice(index, 1);
+}
+
+function addSecretRow() {
+  secretRows.value.push({ key: "", value: "" });
+}
+
+function removeSecretRow(index: number) {
+  secretRows.value.splice(index, 1);
+}
+
+function resetConfig(type: string, config?: Record<string, unknown>) {
+  headerRows.value = [];
+  secretRows.value = [];
+  scriptText.value = "";
+  scriptTtl.value = "";
+  scriptSensitive.value = "";
+
+  if (type === "header") {
+    const list = (config?.headers as Array<Record<string, unknown>>) ?? [];
+    headerRows.value = list.length
+      ? list.map(h => ({
+          name: String(h.name ?? ""),
+          value: String(h.value ?? ""),
+          in: h.in === "query" ? ("query" as const) : ("header" as const)
+        }))
+      : [{ name: "X-Api-Key", value: "", in: "header" }];
+    return;
+  }
+
+  if (type === "script") {
+    scriptText.value = String(config?.script ?? "");
+    const secrets = (config?.secrets as Record<string, unknown>) ?? {};
+    const keys = Object.keys(secrets);
+    secretRows.value = keys.length
+      ? keys.map(k => ({ key: k, value: String(secrets[k] ?? "") }))
+      : [{ key: "token", value: "" }];
+    scriptTtl.value = config?.ttlSeconds == null ? "" : String(config.ttlSeconds);
+    const declared = config?.sensitiveKeys;
+    scriptSensitive.value = Array.isArray(declared) ? declared.join(", ") : "";
+  }
+}
+
+function buildConfig(): Record<string, unknown> {
+  if (form.type === "header") {
+    return {
+      headers: headerRows.value.map(r => ({
+        name: r.name.trim(),
+        value: r.value,
+        in: r.in
+      }))
+    };
+  }
+  const secrets: Record<string, string> = {};
+  secretRows.value.forEach(r => {
+    const key = r.key.trim();
+    if (key) {
+      secrets[key] = r.value;
+    }
+  });
+  const config: Record<string, unknown> = { script: scriptText.value, secrets };
+  if (scriptTtl.value) {
+    config.ttlSeconds = Number(scriptTtl.value);
+  }
+  const declared = scriptSensitive.value
+    .split(/[,，\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (declared.length) {
+    config.sensitiveKeys = declared;
+  }
+  return config;
 }
 
 async function load() {
@@ -127,36 +176,27 @@ const dialog = reactive({ visible: false, saving: false, id: "" });
 const form = reactive({
   code: "",
   name: "",
-  type: "api_key",
+  type: "header",
   isDefault: false,
   status: 1,
   effectiveFrom: "",
   effectiveTo: "",
-  remark: "",
-  config: {} as Record<string, unknown>
+  remark: ""
 });
-
-function resetConfig(type: string, config?: Record<string, unknown>) {
-  const next: Record<string, unknown> = {};
-  fieldsOf(type).forEach(f => {
-    next[f.key] = config?.[f.key] ?? "";
-  });
-  form.config = next;
-}
 
 function openCreate() {
   dialog.id = "";
   Object.assign(form, {
     code: "",
     name: "",
-    type: "api_key",
+    type: "header",
     isDefault: rows.value.length === 0,
     status: 1,
     effectiveFrom: "",
     effectiveTo: "",
     remark: ""
   });
-  resetConfig("api_key");
+  resetConfig("header");
   dialog.visible = true;
 }
 
@@ -177,7 +217,7 @@ function openEdit(row: Credential) {
 }
 
 function onTypeChange(type: string) {
-  // 换类型意味着字段结构变了，旧的键留着只会被后端当噪声丢掉
+  // 换类型意味着 config 形状变了（headers 列表 ↔ script+secrets），旧的键留着只会被后端当噪声丢掉
   resetConfig(type);
 }
 
@@ -197,7 +237,7 @@ async function save() {
       effectiveFrom: form.effectiveFrom || undefined,
       effectiveTo: form.effectiveTo || undefined,
       remark: form.remark,
-      config: form.config
+      config: buildConfig()
     };
     if (dialog.id) {
       await updateCredential(partnerId.value, dialog.id, body);
@@ -440,39 +480,132 @@ onMounted(load);
           </el-select>
         </el-form-item>
 
-        <el-form-item
-          v-for="f in fieldsOf(form.type)"
-          :key="f.key"
-          :label="f.label"
-          :required="f.secret"
-        >
-          <el-select
-            v-if="f.options"
-            v-model="form.config[f.key] as string"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="o in f.options"
-              :key="o.value"
-              :label="o.label"
-              :value="o.value"
-            />
-          </el-select>
-          <el-input
-            v-else
-            v-model="form.config[f.key] as string"
-            :type="f.secret ? 'password' : 'text'"
-            :show-password="f.secret"
-            :placeholder="f.placeholder"
-          />
-          <div v-if="f.hint" class="mt-1 text-xs text-gray-400">{{ f.hint }}</div>
-          <div
-            v-else-if="f.secret && dialog.id"
-            class="mt-1 text-xs text-gray-400"
-          >
-            保持 ****** 或留空表示不修改
+        <!-- header 型：一行一条，多行就是多个头 -->
+        <el-form-item v-if="form.type === 'header'" label="请求头" required>
+          <div class="w-full">
+            <el-table :data="headerRows" size="small" border>
+              <el-table-column label="#" width="46">
+                <template #default="{ $index }">
+                  <span class="font-mono text-xs">{{ $index + 1 }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="名称" min-width="150">
+                <template #default="{ row }">
+                  <el-input v-model="row.name" placeholder="X-Api-Key" />
+                </template>
+              </el-table-column>
+              <el-table-column label="值" min-width="180">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.value"
+                    type="password"
+                    show-password
+                    placeholder="三方分配的密钥"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="位置" width="120">
+                <template #default="{ row }">
+                  <el-select v-model="row.in">
+                    <el-option label="请求头" value="header" />
+                    <el-option label="查询参数" value="query" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="" width="64">
+                <template #default="{ $index }">
+                  <el-button
+                    link
+                    type="danger"
+                    :disabled="headerRows.length <= 1"
+                    @click="removeHeaderRow($index)"
+                  >
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="mt-2 flex items-center gap-2">
+              <el-button size="small" @click="addHeaderRow">添加一行</el-button>
+              <span class="text-xs text-gray-400">
+                值由服务端加密；编辑时看到 ****** 代表不修改
+              </span>
+            </div>
           </div>
         </el-form-item>
+
+        <!-- script 型：代码算出这次要加什么 -->
+        <template v-else>
+          <el-form-item label="脚本" required>
+            <div class="w-full">
+              <el-input
+                v-model="scriptText"
+                type="textarea"
+                :rows="12"
+                resize="vertical"
+                style="font-family: ui-monospace, monospace; font-size: 12px"
+                placeholder="ctx.headers['X-Api-Key'] = ctx.secrets.key"
+              />
+              <div class="mt-2 flex items-center gap-2">
+                <el-button size="small" @click="insertSampleScript">
+                  插入换 token 示例
+                </el-button>
+                <span class="text-xs text-gray-400">
+                  结果写到 ctx.headers / ctx.queryParams；需要缓存就设 ctx.ttlSeconds
+                </span>
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="密钥变量">
+            <div class="w-full">
+              <el-table :data="secretRows" size="small" border>
+                <el-table-column label="变量名" min-width="140">
+                  <template #default="{ row }">
+                    <el-input v-model="row.key" placeholder="token" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="值" min-width="200">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.value"
+                      type="password"
+                      show-password
+                      placeholder="密钥（加密存储）"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="" width="64">
+                  <template #default="{ $index }">
+                    <el-button link type="danger" @click="removeSecretRow($index)">
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="mt-2 flex items-center gap-2">
+                <el-button size="small" @click="addSecretRow">添加变量</el-button>
+                <span class="text-xs text-gray-400">
+                  脚本里用 ctx.secrets.变量名 取；密钥本身不进脚本，方便单独轮换
+                </span>
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="缓存有效期">
+            <el-input v-model="scriptTtl" placeholder="秒，留空=每次调用都执行" style="width: 220px" />
+            <span class="ml-2 text-xs text-gray-400">
+              换 token 类脚本填这里（如 3600），到期前复用结果
+            </span>
+          </el-form-item>
+
+          <el-form-item label="脱敏字段">
+            <el-input
+              v-model="scriptSensitive"
+              placeholder="如 Authorization, X-Sign；留空=脚本产出的全部打码"
+            />
+          </el-form-item>
+        </template>
 
         <el-form-item label="设为默认">
           <el-switch v-model="form.isDefault" />

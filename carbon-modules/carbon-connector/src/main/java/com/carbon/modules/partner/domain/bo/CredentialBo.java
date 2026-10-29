@@ -16,6 +16,13 @@ import java.util.Map;
  * 更不该自己加密（那样主密钥就跑到浏览器里了）。
  * 更新时某个敏感字段留空或等于 {@code ******} → 视为「不修改」，避免编辑凭证时把密钥清空。
  *
+ * <p>两种类型的 config 形状：
+ * <ul>
+ *   <li>{@code header}：{@code {"headers":[{"name":"X-Api-Key","value":"xxx","in":"header"}]}}（in 可省，默认 header，也可为 query）；</li>
+ *   <li>{@code script}：{@code {"script":"ctx.headers['Authorization']='Bearer '+ctx.secrets.token",
+ *       "secrets":{"token":"xxx"},"ttlSeconds":3600,"sensitiveKeys":["Authorization"]}}。</li>
+ * </ul>
+ *
  * @author carbon
  */
 public class CredentialBo {
@@ -29,8 +36,7 @@ public class CredentialBo {
     private String name;
 
     @NotBlank(message = "类型不能为空")
-    @Pattern(regexp = "^(none|api_key|basic|bearer|oauth2_cc|login_token)$",
-            message = "类型只支持 none/api_key/basic/bearer/oauth2_cc/login_token")
+    @Pattern(regexp = "^(header|script)$", message = "类型只支持 header（静态请求头）/ script（Groovy 脚本）")
     private String type;
 
     private Map<String, Object> config;

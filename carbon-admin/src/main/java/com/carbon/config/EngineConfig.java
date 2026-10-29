@@ -77,7 +77,9 @@ public class EngineConfig {
     }
 
     @Bean
-    public CredentialResolver credentialResolver() {
-        return new CredentialResolver();
+    public CredentialResolver credentialResolver(GroovySandbox groovySandbox) {
+        // script 型凭证靠它跑代码；沙箱超时（默认 3s）同时对「脚本里现换 token」生效，
+        // 所以脚本内换 token 的三方往返必须快于沙箱超时。
+        return new CredentialResolver(groovySandbox);
     }
 }

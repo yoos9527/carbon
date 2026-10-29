@@ -51,16 +51,25 @@ export interface Credential {
 }
 
 export const CREDENTIAL_TYPES = [
-  { value: "none", label: "无鉴权" },
-  { value: "api_key", label: "API Key" },
-  { value: "basic", label: "Basic 认证" },
-  { value: "bearer", label: "Bearer Token" },
-  { value: "oauth2_cc", label: "OAuth2 客户端凭证" },
-  { value: "login_token", label: "登录换 Token" }
+  { value: "header", label: "静态请求头" },
+  { value: "script", label: "Groovy 脚本" }
 ];
 
 export function credentialTypeLabel(type?: string) {
-  return CREDENTIAL_TYPES.find(i => i.value === type)?.label ?? type ?? "-";
+  const hit = CREDENTIAL_TYPES.find(i => i.value === type);
+  if (hit) {
+    return hit.label;
+  }
+  // 旧类型的存量数据（已被 V9 停用）仍会在列表里出现，给个可读的名字而不是裸枚举值
+  const legacy: Record<string, string> = {
+    none: "无鉴权（旧）",
+    api_key: "API Key（旧）",
+    basic: "Basic 认证（旧）",
+    bearer: "Bearer Token（旧）",
+    oauth2_cc: "OAuth2（旧）",
+    login_token: "登录换 Token（旧）"
+  };
+  return (type && legacy[type]) || type || "-";
 }
 
 export const PARTNER_STATUS = [

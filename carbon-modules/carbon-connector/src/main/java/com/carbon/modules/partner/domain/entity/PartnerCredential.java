@@ -29,7 +29,7 @@ public class PartnerCredential extends BaseEntity {
 
     private String name;
 
-    /** none / api_key / basic / bearer / oauth2_cc / login_token */
+    /** header（静态请求头）/ script（Groovy 脚本）；V9 之前的旧六型已迁移或停用 */
     private String type;
 
     /** JSON，敏感字段为密文 */

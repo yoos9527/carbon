@@ -115,8 +115,8 @@ public class CredentialServiceImpl implements ICredentialService {
             setDefault(partnerId, id);
         }
         events.publishEvent(PartnerCredentialChangedEvent.of(id));
-        // 类型换了（例如 api_key 改 oauth2_cc）时，旧类型的 token 缓存已经没有意义，
-        // 但缓存 key 是 credentialId:type，类型变了自然不会再命中，无需额外处理。
+        // 类型或内容变了都要清缓存：脚本型的 token 缓存 key 是 credentialId:script，
+        // 内容变了但 key 不变，不清就会继续用旧 token 直到过期。
         log.info("凭证更新成功 partnerId={} id={} type={} -> {}", partnerId, id, previousType, entity.getType());
     }
 
@@ -311,6 +311,8 @@ public class CredentialServiceImpl implements ICredentialService {
     }
 
     private void applyTo(PartnerCredential entity, CredentialBo bo, Map<String, Object> existingPlain) {
+        // 先校结构再加密：结构错了却存进库，等于把「保存成功但调用必然失败」的凭证留给用户
+        CredentialConfigCodec.validate(bo.getType(), bo.getConfig());
         entity.setCode(bo.getCode().trim());
         entity.setName(bo.getName().trim());
         entity.setType(bo.getType());
