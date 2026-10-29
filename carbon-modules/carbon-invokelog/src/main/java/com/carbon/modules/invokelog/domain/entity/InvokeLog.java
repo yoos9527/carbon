@@ -36,6 +36,15 @@ public class InvokeLog {
 
     private Long operationId;
 
+    /** 合作方（调用发生时已解析到的那一层） */
+    private Long partnerId;
+
+    /** 实际使用的凭证；未配置鉴权时为 null */
+    private Long partnerCredentialId;
+
+    /** 凭证类型，便于按鉴权方式排查 401 */
+    private String credentialType;
+
     private String method;
 
     /** 脱敏后的完整 URL */
@@ -112,6 +121,30 @@ public class InvokeLog {
 
     public void setOperationId(Long operationId) {
         this.operationId = operationId;
+    }
+
+    public Long getPartnerId() {
+        return partnerId;
+    }
+
+    public void setPartnerId(Long partnerId) {
+        this.partnerId = partnerId;
+    }
+
+    public Long getPartnerCredentialId() {
+        return partnerCredentialId;
+    }
+
+    public void setPartnerCredentialId(Long partnerCredentialId) {
+        this.partnerCredentialId = partnerCredentialId;
+    }
+
+    public String getCredentialType() {
+        return credentialType;
+    }
+
+    public void setCredentialType(String credentialType) {
+        this.credentialType = credentialType;
     }
 
     public String getMethod() {

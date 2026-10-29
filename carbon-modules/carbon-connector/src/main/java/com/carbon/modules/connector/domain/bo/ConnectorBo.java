@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -11,11 +12,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 连接器新增/修改入参。
+ * 接入点新增/修改入参。
  *
  * <p>这里的校验只做「明显不合法」的拦截（长度、格式、范围）；
  * 「base_url 能不能连通」「模板占位符有没有拼错」放到试调与保存前校验里——
  * 在表单校验阶段做网络请求会让用户点保存就卡三秒。
+ *
+ * <p>刻意**没有**鉴权字段：密钥属于合作方，接入点只能选一条凭证。
  *
  * @author carbon
  */
@@ -47,6 +50,13 @@ public class ConnectorBo {
     @Valid
     private RetryBo retry;
 
+    /** 所属合作方 */
+    @NotNull(message = "所属合作方不能为空")
+    private Long partnerId;
+
+    /** 默认凭证；留空表示用合作方的默认凭证 */
+    private Long credentialId;
+
     /** 0 草稿 / 1 启用 */
     @Min(0)
     @Max(1)
@@ -54,9 +64,6 @@ public class ConnectorBo {
 
     @Size(max = 512, message = "备注不能超过 512 字")
     private String remark;
-
-    @Valid
-    private AuthBo auth;
 
     /**
      * 重试策略。默认不重试——非幂等的 POST 被重试一次就可能重复下单。
@@ -110,41 +117,6 @@ public class ConnectorBo {
 
         public void setRetryOn(List<Integer> retryOn) {
             this.retryOn = retryOn;
-        }
-    }
-
-    /**
-     * 鉴权配置。
-     *
-     * <p>{@code config} 里放**明文**密钥：加密是这一层的事，前端不应该看到 {@code ENC:v1:} 密文，
-     * 也不该自己加密（那样密钥就跑到浏览器里了）。
-     * 更新时若某个字段留空，视为「不修改」——避免编辑连接器时把密钥清空。
-     *
-     * @author carbon
-     */
-    public static class AuthBo {
-
-        @NotBlank(message = "鉴权类型不能为空")
-        @Pattern(regexp = "^(none|api_key|basic|bearer|oauth2_cc|login_token)$",
-                message = "鉴权类型只支持 none/api_key/basic/bearer/oauth2_cc/login_token")
-        private String authType;
-
-        private Map<String, Object> config;
-
-        public String getAuthType() {
-            return authType;
-        }
-
-        public void setAuthType(String authType) {
-            this.authType = authType;
-        }
-
-        public Map<String, Object> getConfig() {
-            return config;
-        }
-
-        public void setConfig(Map<String, Object> config) {
-            this.config = config;
         }
     }
 
@@ -220,11 +192,19 @@ public class ConnectorBo {
         this.remark = remark;
     }
 
-    public AuthBo getAuth() {
-        return auth;
+    public Long getPartnerId() {
+        return partnerId;
     }
 
-    public void setAuth(AuthBo auth) {
-        this.auth = auth;
+    public void setPartnerId(Long partnerId) {
+        this.partnerId = partnerId;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
     }
 }

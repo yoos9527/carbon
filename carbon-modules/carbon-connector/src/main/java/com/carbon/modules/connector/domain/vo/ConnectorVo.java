@@ -30,10 +30,12 @@ public class ConnectorVo {
     private Integer status;
     private String remark;
 
-    /** 鉴权类型；{@code null} 表示未配置（等价 none） */
-    private String authType;
-    /** 脱敏后的配置，前端只读展示，不回填到表单 */
-    private Map<String, Object> authConfigMasked;
+    /** 所属合作方 */
+    private Long partnerId;
+    private String partnerName;
+    /** 默认凭证；{@code null} 表示用合作方的默认凭证 */
+    private Long credentialId;
+    private String credentialName;
 
     private Integer operationCount;
     private LocalDateTime createdAt;
@@ -46,6 +48,8 @@ public class ConnectorVo {
         vo.name = entity.getName();
         vo.category = entity.getCategory();
         vo.baseUrl = entity.getBaseUrl();
+        vo.partnerId = entity.getPartnerId();
+        vo.credentialId = entity.getCredentialId();
         vo.timeoutMs = entity.getTimeoutMs();
         vo.status = entity.getStatus();
         vo.remark = entity.getRemark();
@@ -134,20 +138,36 @@ public class ConnectorVo {
         this.remark = remark;
     }
 
-    public String getAuthType() {
-        return authType;
+    public Long getPartnerId() {
+        return partnerId;
     }
 
-    public void setAuthType(String authType) {
-        this.authType = authType;
+    public void setPartnerId(Long partnerId) {
+        this.partnerId = partnerId;
     }
 
-    public Map<String, Object> getAuthConfigMasked() {
-        return authConfigMasked;
+    public String getPartnerName() {
+        return partnerName;
     }
 
-    public void setAuthConfigMasked(Map<String, Object> authConfigMasked) {
-        this.authConfigMasked = authConfigMasked;
+    public void setPartnerName(String partnerName) {
+        this.partnerName = partnerName;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
+    }
+
+    public String getCredentialName() {
+        return credentialName;
+    }
+
+    public void setCredentialName(String credentialName) {
+        this.credentialName = credentialName;
     }
 
     public Integer getOperationCount() {

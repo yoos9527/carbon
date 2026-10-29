@@ -45,7 +45,26 @@ public record InvokeLogEvent(String traceId,
                              boolean truncated,
                              long durationMs,
                              String errCode,
-                             String errMsg) {
+                             String errMsg,
+                             Long partnerId,
+                             Long partnerCredentialId,
+                             String credentialType) {
+
+    /**
+     * 兼容旧调用方的构造器（不带合作方/凭证三列）。
+     *
+     * <p>保留它是为了不让「编排内部调用」「网关直连」这些不经过 {@code InvokeService.LogDraft}
+     * 的链路为了三个统计字段平白多传十几个 null。
+     */
+    public InvokeLogEvent(String traceId, String source, Long appId, Long flowRunId,
+                          Long connectorId, Long operationId, String method, String realUrl,
+                          Map<String, String> reqHeaders, String reqBody, Integer respStatus,
+                          String respBody, boolean truncated, long durationMs,
+                          String errCode, String errMsg) {
+        this(traceId, source, appId, flowRunId, connectorId, operationId, method, realUrl,
+                reqHeaders, reqBody, respStatus, respBody, truncated, durationMs,
+                errCode, errMsg, null, null, null);
+    }
 
     public static final String SOURCE_CONSOLE = "CONSOLE";
     public static final String SOURCE_GATEWAY = "GW";

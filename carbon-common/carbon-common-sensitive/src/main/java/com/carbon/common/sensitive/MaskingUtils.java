@@ -119,7 +119,7 @@ public final class MaskingUtils {
      * 「整个子树都是凭据」的键名。
      *
      * <p>为什么需要它：靠键名黑名单判断时，{@code {"config":{"value":"secret"}}} 里的
-     * {@code value} 看起来完全无害——可它正是 {@code connector_auth.config} 存密钥的地方。
+     * {@code value} 看起来完全无害——可它正是 {@code partner_credential.config} 存密钥的地方。
      * 平台里 {@code config} 这个键<b>只</b>用于鉴权配置（{@code ConnectorBo.AuthBo.config}），
      * 所以整块打码；{@code authType} 在它外面，仍然可读，审计需要的是「用的哪种鉴权」而不是密钥。
      *

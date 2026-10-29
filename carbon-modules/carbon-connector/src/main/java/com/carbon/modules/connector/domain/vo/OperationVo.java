@@ -32,6 +32,11 @@ public class OperationVo {
     private Integer scriptTimeoutMs;
     private Integer timeoutMs;
     private Map<String, Object> retry;
+    /** INHERIT / OVERRIDE / NONE */
+    private String credentialMode;
+    private Long credentialId;
+    /** 凭证名称（前端只读展示） */
+    private String credentialName;
     private Integer status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -61,7 +66,33 @@ public class OperationVo {
         vo.headers = headers;
         vo.responseExtract = responseExtract;
         vo.retry = retry;
+        vo.credentialMode = entity.getCredentialMode() == null ? "INHERIT" : entity.getCredentialMode();
+        vo.credentialId = entity.getCredentialId();
         return vo;
+    }
+
+    public String getCredentialMode() {
+        return credentialMode;
+    }
+
+    public void setCredentialMode(String credentialMode) {
+        this.credentialMode = credentialMode;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
+    }
+
+    public String getCredentialName() {
+        return credentialName;
+    }
+
+    public void setCredentialName(String credentialName) {
+        this.credentialName = credentialName;
     }
 
     public Long getId() {

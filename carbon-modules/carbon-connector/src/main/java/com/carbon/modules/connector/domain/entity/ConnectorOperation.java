@@ -1,22 +1,27 @@
 package com.carbon.modules.connector.domain.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.carbon.common.mybatis.core.domain.BaseEntity;
 
 /**
- * 接口（Operation）：连接器下一个可调用的能力，也是网关对外暴露的最小单位。
+ * 接口（Operation）：接入点下一个可调用的能力，也是网关对外暴露的最小单位。
+ *
+ * <p>类名与字段名里的 {@code connectorId} 沿用历史命名（真实的列名也是 {@code connector_id}，
+ * 表名已经是 {@code endpoint_operation}）：调用日志、编排运行记录、DSL 全都在用这个词。
  *
  * @author carbon
  */
-@TableName("connector_operation")
+@TableName("endpoint_operation")
 public class ConnectorOperation extends BaseEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    /** 所属连接器 */
+    /** 所属接入点 */
     private Long connectorId;
 
     /** 连接器内唯一，如 {@code createOrder} */
@@ -57,11 +62,34 @@ public class ConnectorOperation extends BaseEntity {
     /** null 表示继承连接器 */
     private Integer timeoutMs;
 
-    /** JSON，null 表示继承连接器 */
+    /** JSON，null 表示继承接入点 */
     private String retry;
+
+    /** 凭证模式：INHERIT 继承 / OVERRIDE 用 credentialId / NONE 不鉴权 */
+    private String credentialMode;
+
+    /** 仅 OVERRIDE 时有值，且必须属于同一合作方；切回继承时要能清空，所以强制写 null */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Long credentialId;
 
     /** 0 草稿 / 1 启用 */
     private Integer status;
+
+    public String getCredentialMode() {
+        return credentialMode;
+    }
+
+    public void setCredentialMode(String credentialMode) {
+        this.credentialMode = credentialMode;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
+    }
 
     public Long getId() {
         return id;

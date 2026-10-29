@@ -6,7 +6,7 @@
  * 平台里没有任何一个 VO 字段是「需要序列化时自动打码」的——
  * <ul>
  *   <li>{@code app_secret} 从来不回传（只在创建/重置那一次返回明文，且是显式构造的 Map）；</li>
- *   <li>{@code connector_auth.config} 从不整体回传，只回 {@code authConfigMasked}（服务层决定形状）；</li>
+ *   <li>{@code partner_credential.config} 从不整体回传，只回 {@code configMasked}（服务层决定形状）；</li>
  *   <li>真正需要打码的是<b>自由形态</b>的东西：HTTP 报文头、URL query、JSON body、日志参数快照——
  *       它们没有对应的 Java 字段，注解无用武之地。</li>
  * </ul>

@@ -6,43 +6,43 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.carbon.common.core.domain.PageQuery;
 import com.carbon.common.core.enums.BizError;
 import com.carbon.common.core.exception.ServiceException;
-import com.carbon.common.encrypt.CryptoService;
 import com.carbon.common.json.JsonUtils;
 import com.carbon.framework.expression.TemplateRenderer;
 import com.carbon.modules.connector.domain.bo.ConnectorBo;
 import com.carbon.modules.connector.domain.bo.ConnectorCopyBo;
 import com.carbon.modules.connector.domain.entity.Connector;
-import com.carbon.modules.connector.domain.entity.ConnectorAuth;
 import com.carbon.modules.connector.domain.entity.ConnectorOperation;
 import com.carbon.modules.connector.domain.vo.ConnectorVo;
-import com.carbon.modules.connector.mapper.ConnectorAuthMapper;
 import com.carbon.modules.connector.mapper.ConnectorMapper;
 import com.carbon.modules.connector.mapper.ConnectorOperationMapper;
 import com.carbon.modules.connector.service.IConnectorService;
-import com.carbon.modules.connector.support.AuthConfigCodec;
-import com.carbon.common.core.event.ConnectorAuthChangedEvent;
+import com.carbon.modules.partner.domain.entity.Partner;
+import com.carbon.modules.partner.domain.entity.PartnerCredential;
+import com.carbon.modules.partner.mapper.PartnerCredentialMapper;
+import com.carbon.modules.partner.mapper.PartnerMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 连接器管理实现。
+ * 接入点管理实现。
  *
  * <p>几个刻意的选择：
  * <ul>
  *   <li><b>编码唯一性用数据库唯一键兜底</b>：先查再插有并发窗口，所以这里既查也接
  *       {@code DuplicateKeyException}，两者都要有——只靠查会漏，只靠异常则错误信息难懂。</li>
- *   <li><b>保存时就校验模板语法</b>：{@code {{...}}` 写错在试调时才发现的代价太高，
+ *   <li><b>保存时就校验模板语法</b>：{@code {{...}}} 写错在试调时才发现的代价太高，
  *       用 {@link TemplateRenderer#scan(String)} 当场报「第几行第几列」。</li>
- *   <li><b>删除是真删</b>：连接器没有 {@code deleted} 列，删了就是删了，连带删掉鉴权与接口。
- *       想保留历史就把 {@code status} 置 0。</li>
+ *   <li><b>保存时不校验三方连通性</b>：那属于试调的事，让保存按钮保持同步、可预期。</li>
+ *   <li><b>凭证只校验归属，不校验启停</b>：允许先把接入点配好、凭证稍后再启用；
+ *       真正调用时由 {@code CredentialServiceImpl.resolve} 把关并给出「凭证已停用」。</li>
  * </ul>
  *
  * @author carbon
@@ -52,33 +52,32 @@ public class ConnectorServiceImpl implements IConnectorService {
 
     private static final Logger log = LoggerFactory.getLogger(ConnectorServiceImpl.class);
 
-    /** 网关已占用的首段路径字面量，连接器编码不能与之同义 */
+    /** 网关已占用的首段路径字面量，接入点编码不能与之同义 */
     private static final List<String> RESERVED_GATEWAY_CODES = List.of("flows", "health");
 
     private final ConnectorMapper connectorMapper;
-    private final ConnectorAuthMapper authMapper;
     private final ConnectorOperationMapper operationMapper;
-    private final CryptoService crypto;
+    private final PartnerMapper partnerMapper;
+    private final PartnerCredentialMapper credentialMapper;
     private final TemplateRenderer templateRenderer;
-    private final ApplicationEventPublisher events;
 
     public ConnectorServiceImpl(ConnectorMapper connectorMapper,
-                                ConnectorAuthMapper authMapper,
-                                ConnectorOperationMapper operationMapper,
-                                CryptoService crypto,
-                                TemplateRenderer templateRenderer,
-                                ApplicationEventPublisher events) {
+                               ConnectorOperationMapper operationMapper,
+                               PartnerMapper partnerMapper,
+                               PartnerCredentialMapper credentialMapper,
+                               TemplateRenderer templateRenderer) {
         this.connectorMapper = connectorMapper;
-        this.authMapper = authMapper;
         this.operationMapper = operationMapper;
-        this.crypto = crypto;
+        this.partnerMapper = partnerMapper;
+        this.credentialMapper = credentialMapper;
         this.templateRenderer = templateRenderer;
-        this.events = events;
     }
 
     @Override
-    public IPage<ConnectorVo> page(PageQuery pageQuery, String category, Integer status, String keyword) {
+    public IPage<ConnectorVo> page(PageQuery pageQuery, Long partnerId, String category,
+                                   Integer status, String keyword) {
         LambdaQueryWrapper<Connector> wrapper = new LambdaQueryWrapper<Connector>()
+                .eq(partnerId != null, Connector::getPartnerId, partnerId)
                 .eq(category != null && !category.isBlank(), Connector::getCategory, category)
                 .eq(status != null, Connector::getStatus, status)
                 .and(keyword != null && !keyword.isBlank(), w -> w
@@ -91,19 +90,18 @@ public class ConnectorServiceImpl implements IConnectorService {
 
         List<Long> ids = result.getRecords().stream().map(Connector::getId).toList();
         Map<Long, Integer> counts = countOperations(ids);
-        Map<Long, ConnectorAuth> auths = ids.isEmpty() ? Map.of()
-                : authMapper.selectList(new LambdaQueryWrapper<ConnectorAuth>()
-                        .in(ConnectorAuth::getConnectorId, ids))
-                .stream().collect(Collectors.toMap(ConnectorAuth::getConnectorId, a -> a, (a, b) -> a));
+        Map<Long, Partner> partners = loadPartners(result.getRecords());
+        Map<Long, PartnerCredential> credentials = loadCredentials(result.getRecords());
 
-        return result.convert(entity -> toVo(entity, auths.get(entity.getId()), counts.getOrDefault(entity.getId(), 0)));
+        return result.convert(entity -> toVo(entity, partners, credentials,
+                counts.getOrDefault(entity.getId(), 0)));
     }
 
     @Override
     public ConnectorVo detail(Long id) {
         Connector entity = requireById(id);
-        ConnectorAuth auth = findAuth(id);
-        return toVo(entity, auth, countOperations(List.of(id)).getOrDefault(id, 0));
+        return toVo(entity, loadPartners(List.of(entity)), loadCredentials(List.of(entity)),
+                countOperations(List.of(id)).getOrDefault(id, 0));
     }
 
     @Override
@@ -111,14 +109,12 @@ public class ConnectorServiceImpl implements IConnectorService {
     public Long create(ConnectorBo bo) {
         assertCodeAvailable(bo.getCode(), null);
         validateTemplates(bo);
+        assertPartnerAndCredential(bo);
 
         Connector entity = new Connector();
         applyTo(entity, bo);
         connectorMapper.insert(entity);
-
-        saveAuth(entity.getId(), bo.getAuth(), null);
-        events.publishEvent(ConnectorAuthChangedEvent.of(entity.getId()));
-        log.info("连接器创建成功 id={} code={}", entity.getId(), entity.getCode());
+        log.info("接入点创建成功 id={} code={}", entity.getId(), entity.getCode());
         return entity.getId();
     }
 
@@ -130,14 +126,11 @@ public class ConnectorServiceImpl implements IConnectorService {
             assertCodeAvailable(bo.getCode(), id);
         }
         validateTemplates(bo);
+        assertPartnerAndCredential(bo);
 
         applyTo(entity, bo);
         connectorMapper.updateById(entity);
-
-        saveAuth(id, bo.getAuth(), findAuth(id));
-        // 鉴权可能变了：让运行时丢掉缓存里的 token（否则改完密钥还要等最长 1 小时才生效）
-        events.publishEvent(ConnectorAuthChangedEvent.of(id));
-        log.info("连接器更新成功 id={} code={}", id, entity.getCode());
+        log.info("接入点更新成功 id={} code={}", id, entity.getCode());
     }
 
     @Override
@@ -155,28 +148,18 @@ public class ConnectorServiceImpl implements IConnectorService {
         target.setCode(code);
         target.setName(req.getName() == null || req.getName().isBlank()
                 ? truncate(source.getName() + " 副本", 64) : req.getName().trim());
+        target.setPartnerId(source.getPartnerId());
+        target.setCredentialId(source.getCredentialId());
         target.setCategory(source.getCategory());
         target.setBaseUrl(source.getBaseUrl());
         target.setDefaultHeaders(source.getDefaultHeaders());
         target.setTimeoutMs(source.getTimeoutMs());
         target.setRetry(source.getRetry());
-        // 副本一律以停用状态落地：它拿着同一套三方密钥，一创建就能被网关调到，
-        // 等于“复制一下就多了一个生产入口”。要求人先确认基址/环境再启用。
+        // 副本一律以停用状态落地：它指向同一个三方地址，
+        // 一创建就能被网关调到，等于「复制一下就多了一个生产入口」。
         target.setStatus(0);
         target.setRemark(source.getRemark());
         connectorMapper.insert(target);
-
-        ConnectorAuth sourceAuth = findAuth(id);
-        if (sourceAuth != null && sourceAuth.getConfig() != null) {
-            // 直接携密文，不解密：同一部署下 CARBON_MASTER_KEY 是同一把，
-            // 解密再加密只是多一次可能失败的机会（旧数据里还有明文 config）。
-            ConnectorAuth auth = new ConnectorAuth();
-            auth.setConnectorId(target.getId());
-            auth.setAuthType(sourceAuth.getAuthType());
-            auth.setConfig(sourceAuth.getConfig());
-            auth.setStatus(sourceAuth.getStatus() == null ? 1 : sourceAuth.getStatus());
-            authMapper.insert(auth);
-        }
 
         int copied = 0;
         if (req.copyOperations()) {
@@ -201,12 +184,14 @@ public class ConnectorServiceImpl implements IConnectorService {
                 op.setScriptTimeoutMs(source2.getScriptTimeoutMs());
                 op.setTimeoutMs(source2.getTimeoutMs());
                 op.setRetry(source2.getRetry());
+                op.setCredentialMode(source2.getCredentialMode());
+                op.setCredentialId(source2.getCredentialId());
                 op.setStatus(source2.getStatus());
                 operationMapper.insert(op);
                 copied++;
             }
         }
-        log.info("连接器复制成功 {} -> {}（接口 {} 个）", source.getCode(), code, copied);
+        log.info("接入点复制成功 {} -> {}（接口 {} 个）", source.getCode(), code, copied);
         return target.getId();
     }
 
@@ -214,7 +199,7 @@ public class ConnectorServiceImpl implements IConnectorService {
      * 推导一个可用的副本编码：`-copy`、`-copy2`、`-copy3`…
      *
      * <p>后缀算在 64 位长度限制内，所以先把原编码裁到放得下后缀的长度——
-     * 否则一个 64 位编码的连接器永远复制不了（拼接后超长，报的错还很难懂）。
+     * 否则一个 64 位编码的接入点永远复制不了（拼接后超长，报的错还很难懂）。
      */
     private String nextCopyCode(String base) {
         for (int i = 1; i <= 99; i++) {
@@ -246,12 +231,11 @@ public class ConnectorServiceImpl implements IConnectorService {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        // 先删子表再删主表：DDL 里没有外键，顺序错了会留下孤儿鉴权配置
-        authMapper.delete(new LambdaQueryWrapper<ConnectorAuth>().in(ConnectorAuth::getConnectorId, ids));
-        operationMapper.delete(new LambdaQueryWrapper<ConnectorOperation>().in(ConnectorOperation::getConnectorId, ids));
+        // 先删子表再删主表：DDL 里没有外键，顺序错了会留下孤儿接口
+        operationMapper.delete(new LambdaQueryWrapper<ConnectorOperation>()
+                .in(ConnectorOperation::getConnectorId, ids));
         connectorMapper.deleteByIds(ids);
-        ids.forEach(id -> events.publishEvent(ConnectorAuthChangedEvent.of(id)));
-        log.info("连接器删除成功 ids={}", ids);
+        log.info("接入点删除成功 ids={}", ids);
     }
 
     @Override
@@ -266,7 +250,7 @@ public class ConnectorServiceImpl implements IConnectorService {
         Connector entity = connectorMapper.selectOne(
                 new LambdaQueryWrapper<Connector>().eq(Connector::getCode, code));
         if (entity == null) {
-            throw ServiceException.of(BizError.CONNECTOR_NOT_FOUND, "连接器不存在：" + code);
+            throw ServiceException.of(BizError.CONNECTOR_NOT_FOUND, "接入点不存在：" + code);
         }
         return entity;
     }
@@ -275,25 +259,9 @@ public class ConnectorServiceImpl implements IConnectorService {
     public Connector requireById(Long id) {
         Connector entity = connectorMapper.selectById(id);
         if (entity == null) {
-            throw ServiceException.of(BizError.CONNECTOR_NOT_FOUND, "连接器不存在：id=" + id);
+            throw ServiceException.of(BizError.CONNECTOR_NOT_FOUND, "接入点不存在：id=" + id);
         }
         return entity;
-    }
-
-    @Override
-    public ConnectorAuth findAuth(Long connectorId) {
-        return authMapper.selectOne(
-                new LambdaQueryWrapper<ConnectorAuth>().eq(ConnectorAuth::getConnectorId, connectorId));
-    }
-
-    @Override
-    public Map<String, Object> authConfigPlain(Long connectorId) {
-        ConnectorAuth auth = findAuth(connectorId);
-        if (auth == null || auth.getConfig() == null || auth.getConfig().isBlank()) {
-            return Map.of();
-        }
-        Map<String, Object> stored = JsonUtils.parseMap(auth.getConfig());
-        return AuthConfigCodec.decrypt(stored, crypto);
     }
 
     @Override
@@ -303,7 +271,7 @@ public class ConnectorServiceImpl implements IConnectorService {
                 .eq(ConnectorOperation::getCode, operationCode));
         if (operation == null) {
             throw ServiceException.of(BizError.OPERATION_NOT_FOUND,
-                    "接口不存在：" + operationCode + "（连接器 id=" + connectorId + "）");
+                    "接口不存在：" + operationCode + "（接入点 id=" + connectorId + "）");
         }
         return operation;
     }
@@ -330,8 +298,33 @@ public class ConnectorServiceImpl implements IConnectorService {
 
     // ------------------------------------------------------------------ 内部方法
 
+    /**
+     * 合作方必须存在；凭证若指定了，必须存在且属于同一个合作方。
+     *
+     * <p>跨合作方挂凭证是典型的「复制粘贴配错」：KV 表里看着都对，调用时才把 A 家的密钥
+     * 发给 B 家的地址。在保存时就拒掉，比在调用日志里发现一条 401 便宜得多。
+     */
+    private void assertPartnerAndCredential(ConnectorBo bo) {
+        Partner partner = partnerMapper.selectById(bo.getPartnerId());
+        if (partner == null) {
+            throw ServiceException.of(BizError.PARTNER_NOT_FOUND, "合作方不存在：id=" + bo.getPartnerId());
+        }
+        Long credentialId = bo.getCredentialId();
+        if (credentialId == null) {
+            return;
+        }
+        PartnerCredential credential = credentialMapper.selectById(credentialId);
+        if (credential == null) {
+            throw ServiceException.of(BizError.CREDENTIAL_NOT_FOUND, "凭证不存在：id=" + credentialId);
+        }
+        if (!credential.getPartnerId().equals(bo.getPartnerId())) {
+            throw ServiceException.param("凭证不属于该合作方：凭证 id=" + credentialId
+                    + "，接入点所属合作方 id=" + bo.getPartnerId());
+        }
+    }
+
     private void assertCodeAvailable(String code, Long excludeId) {
-        // 网关有两个字面量路径段（/gw/flows/** 与 /gw/health），连接器编码叫这两个名字
+        // 网关有两个字面量路径段（/gw/flows/** 与 /gw/health），接入点编码叫这两个名字
         // 会被 Spring 的「字面量优先」规则抢走，接口永远调不到。
         // 报在保存时而不是等人踩坑后去猜「为什么 404」。
         if (RESERVED_GATEWAY_CODES.contains(code)) {
@@ -372,6 +365,8 @@ public class ConnectorServiceImpl implements IConnectorService {
     }
 
     private void applyTo(Connector entity, ConnectorBo bo) {
+        entity.setPartnerId(bo.getPartnerId());
+        entity.setCredentialId(bo.getCredentialId());
         entity.setCode(bo.getCode());
         entity.setName(bo.getName());
         entity.setCategory(bo.getCategory());
@@ -383,43 +378,28 @@ public class ConnectorServiceImpl implements IConnectorService {
         entity.setRemark(bo.getRemark());
     }
 
-    /**
-     * 鉴权配置的 upsert。
-     *
-     * @param existing 库里已有的鉴权（可能为 null）；用它兜住「编辑时没重填密钥」的场景
-     */
-    private void saveAuth(Long connectorId, ConnectorBo.AuthBo authBo, ConnectorAuth existing) {
-        if (authBo == null || authBo.getAuthType() == null) {
-            return;
+    private Map<Long, Partner> loadPartners(List<Connector> connectors) {
+        List<Long> ids = connectors.stream().map(Connector::getPartnerId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
         }
-        Map<String, Object> existingPlain = existing == null || existing.getConfig() == null
-                ? Map.of()
-                : AuthConfigCodec.decrypt(JsonUtils.parseMap(existing.getConfig()), crypto);
-
-        Map<String, Object> encrypted = AuthConfigCodec.encryptForSave(
-                authBo.getAuthType(), authBo.getConfig(), existingPlain, crypto);
-
-        // none 不需要落库，直接清掉旧的，避免「类型改成 none 但旧密钥还留在库里」
-        if ("none".equals(authBo.getAuthType())) {
-            if (existing != null) {
-                authMapper.deleteById(existing.getId());
-            }
-            return;
-        }
-
-        ConnectorAuth target = existing == null ? new ConnectorAuth() : existing;
-        target.setConnectorId(connectorId);
-        target.setAuthType(authBo.getAuthType());
-        target.setConfig(JsonUtils.toJson(encrypted));
-        target.setStatus(1);
-        if (existing == null) {
-            authMapper.insert(target);
-        } else {
-            authMapper.updateById(target);
-        }
+        return partnerMapper.selectByIds(ids).stream()
+                .collect(Collectors.toMap(Partner::getId, Function.identity(), (a, b) -> a));
     }
 
-    private ConnectorVo toVo(Connector entity, ConnectorAuth auth, int operationCount) {
+    private Map<Long, PartnerCredential> loadCredentials(List<Connector> connectors) {
+        List<Long> ids = connectors.stream().map(Connector::getCredentialId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return credentialMapper.selectByIds(ids).stream()
+                .collect(Collectors.toMap(PartnerCredential::getId, Function.identity(), (a, b) -> a));
+    }
+
+    private ConnectorVo toVo(Connector entity, Map<Long, Partner> partners,
+                             Map<Long, PartnerCredential> credentials, int operationCount) {
         ConnectorVo vo = ConnectorVo.of(entity);
         vo.setDefaultHeaders(entity.getDefaultHeaders() == null
                 ? Map.of()
@@ -428,12 +408,14 @@ public class ConnectorServiceImpl implements IConnectorService {
                 ? Map.of()
                 : JsonUtils.parseMap(entity.getRetry()));
         vo.setOperationCount(operationCount);
-        if (auth != null) {
-            vo.setAuthType(auth.getAuthType());
-            Map<String, Object> stored = auth.getConfig() == null
-                    ? Map.of()
-                    : JsonUtils.parseMap(auth.getConfig());
-            vo.setAuthConfigMasked(AuthConfigCodec.mask(auth.getAuthType(), stored));
+        Partner partner = entity.getPartnerId() == null ? null : partners.get(entity.getPartnerId());
+        if (partner != null) {
+            vo.setPartnerName(partner.getName());
+        }
+        PartnerCredential credential = entity.getCredentialId() == null
+                ? null : credentials.get(entity.getCredentialId());
+        if (credential != null) {
+            vo.setCredentialName(credential.getName());
         }
         return vo;
     }

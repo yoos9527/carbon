@@ -19,6 +19,17 @@ public enum BizError {
     CONNECTOR_NOT_FOUND(404),
     OPERATION_NOT_FOUND(404),
 
+    /** 合作方不存在（调度按 code/id 找不到） */
+    PARTNER_NOT_FOUND(404),
+    /** 合作方已停用/禁用：连坐旗下所有接入点 */
+    PARTNER_DISABLED(403),
+    /** 接入点已停用 */
+    ENDPOINT_DISABLED(403),
+    /** 接口已停用 */
+    OPERATION_DISABLED(403),
+    /** 凭证不存在或不属于该合作方 */
+    CREDENTIAL_NOT_FOUND(404),
+
     PARAM_INVALID(400),
 
     /** 三方鉴权获取 Token 失败（网络/凭证错误） */

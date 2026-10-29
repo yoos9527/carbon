@@ -62,9 +62,37 @@ public class OperationBo {
 
     private ConnectorBo.RetryBo retry;
 
+    /**
+     * 凭证模式：INHERIT（默认，沿用接入点/合作方）/ OVERRIDE（用本接口的 credentialId）/ NONE（不鉴权）。
+     *
+     * <p>同一个合作方下确实会有「多数接口用同一套 key、个别接口用另一套或不用」的情况，
+     * 所以覆盖点必须能落到接口这一层；但默认必须是继承，否则每加一个接口都要人重新选一次密钥。
+     */
+    @Pattern(regexp = "^(INHERIT|OVERRIDE|NONE)$", message = "凭证模式只支持 INHERIT/OVERRIDE/NONE")
+    private String credentialMode;
+
+    /** 仅 OVERRIDE 时有效，且必须属于同一合作方 */
+    private Long credentialId;
+
     @Min(0)
     @Max(1)
     private Integer status;
+
+    public String getCredentialMode() {
+        return credentialMode;
+    }
+
+    public void setCredentialMode(String credentialMode) {
+        this.credentialMode = credentialMode;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
+    }
 
     /**
      * 单条响应抽取规则。

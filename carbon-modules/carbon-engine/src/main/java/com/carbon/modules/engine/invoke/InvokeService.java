@@ -16,11 +16,13 @@ import com.carbon.framework.http.RetryPolicy;
 import com.carbon.framework.script.GroovySandbox;
 import com.carbon.framework.script.ScriptResult;
 import com.carbon.modules.connector.domain.entity.Connector;
-import com.carbon.modules.connector.domain.entity.ConnectorAuth;
 import com.carbon.modules.connector.domain.entity.ConnectorOperation;
 import com.carbon.modules.connector.service.IConnectorService;
 import com.carbon.modules.connector.service.IEnvService;
-import com.carbon.modules.engine.auth.AuthResolver;
+import com.carbon.modules.engine.credential.CredentialResolver;
+import com.carbon.modules.partner.domain.entity.Partner;
+import com.carbon.modules.partner.service.ICredentialService;
+import com.carbon.modules.partner.service.IPartnerService;
 import com.carbon.modules.engine.extract.ResponseExtractor;
 import com.carbon.common.sensitive.MaskingUtils;
 import org.slf4j.Logger;
@@ -73,7 +75,9 @@ public class InvokeService {
     private final TemplateRenderer templateRenderer;
     private final HttpExecutor httpExecutor;
     private final GroovySandbox groovySandbox;
-    private final AuthResolver authResolver;
+    private final CredentialResolver credentialResolver;
+    private final IPartnerService partnerService;
+    private final ICredentialService credentialService;
     /** 日志落库是旁路：没有实现（单测、纯引擎部署）就是空列表，不写条件分支 */
     private final List<InvokeLogSink> logSinks;
 
@@ -82,14 +86,18 @@ public class InvokeService {
                          TemplateRenderer templateRenderer,
                          HttpExecutor httpExecutor,
                          GroovySandbox groovySandbox,
-                         AuthResolver authResolver,
+                         CredentialResolver credentialResolver,
+                         IPartnerService partnerService,
+                         ICredentialService credentialService,
                          List<InvokeLogSink> logSinks) {
         this.connectorService = connectorService;
         this.envService = envService;
         this.templateRenderer = templateRenderer;
         this.httpExecutor = httpExecutor;
         this.groovySandbox = groovySandbox;
-        this.authResolver = authResolver;
+        this.credentialResolver = credentialResolver;
+        this.partnerService = partnerService;
+        this.credentialService = credentialService;
         this.logSinks = logSinks == null ? List.of() : List.copyOf(logSinks);
     }
 
@@ -117,25 +125,38 @@ public class InvokeService {
     private InvokeResult run(InvokeRequest request, String traceId, long startNanos, LogDraft draft) {
         Connector connector = connectorService.requireByCode(request.connectorCode());
         draft.connectorId = connector.getId();
+
+        // 校验顺序是刻意的：合作方（商务主体）→ 接入点（地址）→ 接口（能力）。
+        // 反过来会让人对着「接口已停用」去改接口，而真正的原因是那家公司被拉黑了。
+        if (connector.getPartnerId() != null) {
+            Partner partner = partnerService.requireById(connector.getPartnerId());
+            draft.partnerId = partner.getId();
+            if (partner.getStatus() == null || partner.getStatus() != 1) {
+                throw ServiceException.of(BizError.PARTNER_DISABLED, "合作方已停用：" + partner.getName());
+            }
+        }
         if (connector.getStatus() == null || connector.getStatus() != 1) {
-            throw ServiceException.param("连接器已停用：" + connector.getCode());
+            throw ServiceException.of(BizError.ENDPOINT_DISABLED, "接入点已停用：" + connector.getCode());
         }
         ConnectorOperation operation = connectorService.requireOperation(connector.getId(), request.operationCode());
         draft.operationId = operation.getId();
         if (operation.getStatus() != null && operation.getStatus() != 1) {
-            throw ServiceException.param("接口已停用：" + operation.getCode());
+            throw ServiceException.of(BizError.OPERATION_DISABLED, "接口已停用：" + operation.getCode());
         }
 
         Map<String, Object> envVars = envService.varsOf(request.envCode());
-        ConnectorAuth auth = connectorService.findAuth(connector.getId());
-        String authType = auth == null ? "none" : auth.getAuthType();
-        Map<String, Object> authPlain = connectorService.authConfigPlain(connector.getId());
+        // 凭证沿「接口覆盖 → 接入点 → 合作方默认」解析；解析不到就是「不鉴权」，不是错误
+        ICredentialService.Resolved credential = credentialService.resolve(connector, operation);
+        draft.partnerCredentialId = credential.id();
+        draft.credentialType = credential.type();
+        Map<String, Object> credentialPlain = credential.config() == null ? Map.of() : credential.config();
 
-        // 脚本可见的 ctx：input / vars / auth / env 四个作用域
+        // 脚本可见的 ctx：input / vars / auth / env 四个作用域。
+        // 作用域名仍然叫 auth：线上已有 Groovy 脚本用的是 ctx.auth，改名字会静默地把它们弄坏。
         Map<String, Object> ctx = new LinkedHashMap<>();
         ctx.put("input", new LinkedHashMap<>(request.input()));
         ctx.put("vars", new LinkedHashMap<String, Object>());
-        ctx.put("auth", new LinkedHashMap<>(authPlain));
+        ctx.put("auth", new LinkedHashMap<>(credentialPlain));
         ctx.put("env", envVars);
 
         runScript(operation.getPreScript(), ctx, traceId, operation.getScriptTimeoutMs());
@@ -146,24 +167,26 @@ public class InvokeService {
         asMap(ctx.get("auth")).forEach(renderContext::auth);
         asMap(ctx.get("env")).forEach(renderContext::env);
 
-        AuthResolver.AuthOutcome authOutcome;
+        CredentialResolver.CredentialOutcome credentialOutcome;
         try {
-            authOutcome = authResolver.resolve(connector.getId(), authType, authPlain, httpExecutor);
+            credentialOutcome = credential.authenticated()
+                    ? credentialResolver.resolve(credential.id(), credential.type(), credentialPlain, httpExecutor)
+                    : CredentialResolver.CredentialOutcome.EMPTY;
         } catch (ServiceException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw ServiceException.of(BizError.AUTH_FAILED, "鉴权失败：" + e.getMessage());
+            throw ServiceException.of(BizError.AUTH_FAILED, "凭证解析失败：" + e.getMessage());
         }
 
-        String url = buildUrl(connector, operation, renderContext, authOutcome);
-        Map<String, String> headers = buildHeaders(connector, operation, renderContext, authOutcome, request);
+        String url = buildUrl(connector, operation, renderContext, credentialOutcome);
+        Map<String, String> headers = buildHeaders(connector, operation, renderContext, credentialOutcome, request);
         String body = buildBody(operation, renderContext);
 
         draft.method = operation.getMethod().toUpperCase();
         InvokeResult.SentRequest sent = new InvokeResult.SentRequest(
                 operation.getMethod().toUpperCase(),
                 MaskingUtils.maskUrl(url),
-                MaskingUtils.maskHeaders(headers, authOutcome.sensitiveKeys()),
+                MaskingUtils.maskHeaders(headers, credentialOutcome.sensitiveKeys()),
                 MaskingUtils.maskJson(body));
 
         draft.realUrl = sent.url();
@@ -223,7 +246,8 @@ public class InvokeService {
             InvokeLogEvent event = new InvokeLogEvent(traceId, draft.source, draft.appId, null,
                     draft.connectorId, draft.operationId, draft.method, draft.realUrl,
                     draft.reqHeaders, draft.reqBody, draft.respStatus, draft.respBody,
-                    draft.truncated, elapsedMs(startNanos), draft.errCode, draft.errMsg);
+                    draft.truncated, elapsedMs(startNanos), draft.errCode, draft.errMsg,
+                    draft.partnerId, draft.partnerCredentialId, draft.credentialType);
             for (InvokeLogSink sink : logSinks) {
                 sink.record(event);
             }
@@ -244,6 +268,9 @@ public class InvokeService {
         private final Long appId;
         private Long connectorId;
         private Long operationId;
+        private Long partnerId;
+        private Long partnerCredentialId;
+        private String credentialType;
         private String method;
         private String realUrl;
         private Map<String, String> reqHeaders;
@@ -282,7 +309,7 @@ public class InvokeService {
     private String buildUrl(Connector connector,
                             ConnectorOperation operation,
                             RenderContext context,
-                            AuthResolver.AuthOutcome authOutcome) {
+                            CredentialResolver.CredentialOutcome credentialOutcome) {
         String base = templateRenderer.renderText(connector.getBaseUrl(), context);
         String path = templateRenderer.renderText(operation.getPath(), context);
         String url = joinUrl(base, path);
@@ -292,7 +319,7 @@ public class InvokeService {
             JsonUtils.parseMap(operation.getQueryParams()).forEach((key, value) ->
                     query.put(key, urlEncode(templateRenderer.renderText(String.valueOf(value), context))));
         }
-        query.putAll(authOutcome.queryParams());
+        query.putAll(credentialOutcome.queryParams());
 
         if (query.isEmpty()) {
             return url;
@@ -353,7 +380,7 @@ public class InvokeService {
     private Map<String, String> buildHeaders(Connector connector,
                                              ConnectorOperation operation,
                                              RenderContext context,
-                                             AuthResolver.AuthOutcome authOutcome,
+                                             CredentialResolver.CredentialOutcome credentialOutcome,
                                              InvokeRequest request) {
         Map<String, String> headers = new LinkedHashMap<>();
         if (connector.getDefaultHeaders() != null && !connector.getDefaultHeaders().isBlank()) {
@@ -364,7 +391,7 @@ public class InvokeService {
             JsonUtils.parseMap(operation.getHeaders()).forEach((key, value) ->
                     headers.put(key, templateRenderer.renderText(String.valueOf(value), context)));
         }
-        headers.putAll(authOutcome.headers());
+        headers.putAll(credentialOutcome.headers());
         if (request.headerOverrides() != null) {
             request.headerOverrides().forEach((key, value) -> {
                 if (key != null && value != null) {

@@ -132,6 +132,9 @@ public class AsyncLogWriter implements InvokeLogSink {
         entity.setFlowRunId(event.flowRunId());
         entity.setConnectorId(event.connectorId());
         entity.setOperationId(event.operationId());
+        entity.setPartnerId(event.partnerId());
+        entity.setPartnerCredentialId(event.partnerCredentialId());
+        entity.setCredentialType(event.credentialType());
         entity.setMethod(event.method());
         entity.setRealUrl(truncate(event.realUrl(), 1024));
         entity.setReqHeadersMasked(event.reqHeaders() == null || event.reqHeaders().isEmpty()

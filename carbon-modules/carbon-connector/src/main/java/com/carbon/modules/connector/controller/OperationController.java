@@ -26,12 +26,12 @@ import com.carbon.common.log.Log;
 import com.carbon.common.idempotent.RepeatSubmit;
 
 /**
- * 接口管理。挂在连接器下面：{@code /api/connectors/{connectorId}/operations}。
+ * 接口管理。挂在接入点下面：{@code /api/endpoints/{connectorId}/operations}。
  *
  * @author carbon
  */
 @RestController
-@RequestMapping("/api/connectors/{connectorId}/operations")
+@RequestMapping("/api/endpoints/{connectorId}/operations")
 public class OperationController extends BaseController {
 
     private static final Set<String> SORTABLE = Set.of("code", "name", "method", "status", "createdAt", "updatedAt");

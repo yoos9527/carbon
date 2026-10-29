@@ -20,8 +20,10 @@ public enum GwErrorCode {
     PARAM_INVALID("400", 400, "参数不合法"),
     SIGN_INVALID("401", 401, "签名校验失败"),
     APP_FORBIDDEN("403", 403, "应用无权调用该连接器"),
-    CONNECTOR_NOT_FOUND("4404", 404, "连接器不存在或已停用"),
+    CONNECTOR_NOT_FOUND("4404", 404, "接入点不存在或已停用"),
     OPERATION_NOT_FOUND("4405", 404, "接口不存在或已停用"),
+    PARTNER_NOT_FOUND("4407", 404, "合作方不存在"),
+    CREDENTIAL_NOT_FOUND("4408", 404, "凭证不存在"),
     FLOW_NOT_FOUND("4406", 404, "流程不存在或未发布"),
     RATE_LIMITED("4029", 429, "调用频率超限"),
     PROVIDER_TIMEOUT("5504", 504, "三方服务超时"),
@@ -68,6 +70,10 @@ public enum GwErrorCode {
             case RATE_LIMITED -> RATE_LIMITED;
             case CONNECTOR_NOT_FOUND -> CONNECTOR_NOT_FOUND;
             case OPERATION_NOT_FOUND -> OPERATION_NOT_FOUND;
+            case PARTNER_NOT_FOUND -> PARTNER_NOT_FOUND;
+            case CREDENTIAL_NOT_FOUND -> CREDENTIAL_NOT_FOUND;
+            // 合作方/接入点/接口被停用，对调用方来说都是「这个入口现在用不了」
+            case PARTNER_DISABLED, ENDPOINT_DISABLED, OPERATION_DISABLED -> APP_FORBIDDEN;
             case FLOW_NOT_FOUND -> FLOW_NOT_FOUND;
             case AUTH_FAILED -> AUTH_FAILED;
             case PROVIDER_TIMEOUT -> PROVIDER_TIMEOUT;

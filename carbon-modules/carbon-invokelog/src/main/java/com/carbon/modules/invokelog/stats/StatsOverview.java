@@ -7,7 +7,7 @@ import java.util.List;
  *
  * <p>看板天然要跨连接器、编排、日志、调度四块数据，而 {@code carbon-invokelog} 是叶子模块
  * （不依赖 {@code carbon-connector}/{@code carbon-flow}，见设计文档 §9.2）。这里不靠模块依赖解决，
- * 而是把这些「计数/取名」直接写进 SQL：{@code SELECT COUNT(*) FROM connector} 只依赖数据库，
+ * 而是把这些「计数/取名」直接写进 SQL：{@code SELECT COUNT(*) FROM endpoint} 只依赖数据库，
  * 不依赖 Java 类型，叶子约束与看板需求因此不冲突。
  *
  * @author carbon

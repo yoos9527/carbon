@@ -54,8 +54,8 @@ public class StatsService {
 
     private StatsOverview.Counts counts() {
         Map<String, Object> row = jdbc.queryForMap("""
-                SELECT (SELECT COUNT(*) FROM connector           WHERE deleted = 0) AS connectors,
-                       (SELECT COUNT(*) FROM connector_operation WHERE deleted = 0) AS operations,
+                SELECT (SELECT COUNT(*) FROM endpoint            WHERE deleted = 0) AS connectors,
+                       (SELECT COUNT(*) FROM endpoint_operation  WHERE deleted = 0) AS operations,
                        (SELECT COUNT(*) FROM flow                WHERE deleted = 0) AS flows,
                        /* app 表刻意没有 deleted：应用是"硬删"，迁移时由 DBA 直接摘行 */
                        (SELECT COUNT(*) FROM app)                              AS apps,
@@ -165,8 +165,8 @@ public class StatsService {
                        COALESCE(AVG(l.duration_ms), 0) AS avg_ms,
                        COALESCE(MAX(l.duration_ms), 0) AS max_ms
                 FROM invoke_log l
-                LEFT JOIN connector c           ON c.id = l.connector_id
-                LEFT JOIN connector_operation o ON o.id = l.operation_id
+                LEFT JOIN endpoint c             ON c.id = l.connector_id
+                LEFT JOIN endpoint_operation o   ON o.id = l.operation_id
                 WHERE l.created_at >= ? AND l.duration_ms IS NOT NULL AND l.connector_id IS NOT NULL
                 GROUP BY l.connector_id, l.operation_id, c.name, o.name
                 ORDER BY avg_ms DESC, calls DESC

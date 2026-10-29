@@ -14,6 +14,8 @@ import com.carbon.modules.connector.domain.vo.OperationVo;
 import com.carbon.modules.connector.mapper.ConnectorOperationMapper;
 import com.carbon.modules.connector.service.IConnectorService;
 import com.carbon.modules.connector.service.IOperationService;
+import com.carbon.modules.partner.domain.entity.PartnerCredential;
+import com.carbon.modules.partner.mapper.PartnerCredentialMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,15 +48,18 @@ public class OperationServiceImpl implements IOperationService {
 
     private final ConnectorOperationMapper operationMapper;
     private final IConnectorService connectorService;
+    private final PartnerCredentialMapper credentialMapper;
     private final TemplateRenderer templateRenderer;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     public OperationServiceImpl(ConnectorOperationMapper operationMapper,
                                 IConnectorService connectorService,
+                                PartnerCredentialMapper credentialMapper,
                                 TemplateRenderer templateRenderer,
                                 com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         this.operationMapper = operationMapper;
         this.connectorService = connectorService;
+        this.credentialMapper = credentialMapper;
         this.templateRenderer = templateRenderer;
         this.objectMapper = objectMapper;
     }
@@ -87,6 +92,7 @@ public class OperationServiceImpl implements IOperationService {
         connectorService.requireById(connectorId);
         assertCodeAvailable(connectorId, bo.getCode(), null);
         validate(bo);
+        assertCredential(connectorId, bo);
 
         ConnectorOperation entity = new ConnectorOperation();
         entity.setConnectorId(connectorId);
@@ -105,6 +111,7 @@ public class OperationServiceImpl implements IOperationService {
             assertCodeAvailable(connectorId, bo.getCode(), id);
         }
         validate(bo);
+        assertCredential(connectorId, bo);
 
         applyTo(entity, bo);
         operationMapper.updateById(entity);
@@ -176,6 +183,30 @@ public class OperationServiceImpl implements IOperationService {
         validateExtract(bo.getResponseExtract());
     }
 
+    /**
+     * 凭证覆盖的归属校验。
+     *
+     * <p>只允许挂到**本接口所属接入点的那个合作方**名下的凭证。跨合作方挂凭证是
+     * 「复制粘贴配错」的典型形态：KV 表里看着都对，调用时才把 A 家的密钥发给 B 家的地址。
+     */
+    private void assertCredential(Long connectorId, OperationBo bo) {
+        String mode = bo.getCredentialMode() == null ? "INHERIT" : bo.getCredentialMode();
+        if (!"OVERRIDE".equals(mode)) {
+            return;
+        }
+        if (bo.getCredentialId() == null) {
+            throw ServiceException.param("凭证模式为 OVERRIDE 时必须指定凭证");
+        }
+        PartnerCredential credential = credentialMapper.selectById(bo.getCredentialId());
+        if (credential == null) {
+            throw ServiceException.of(BizError.CREDENTIAL_NOT_FOUND, "凭证不存在：id=" + bo.getCredentialId());
+        }
+        Long partnerId = connectorService.requireById(connectorId).getPartnerId();
+        if (partnerId == null || !partnerId.equals(credential.getPartnerId())) {
+            throw ServiceException.param("凭证不属于该接入点的合作方：凭证 id=" + bo.getCredentialId());
+        }
+    }
+
     private void validateExtract(List<OperationBo.ExtractBo> extract) {
         if (extract == null) {
             return;
@@ -222,14 +253,27 @@ public class OperationServiceImpl implements IOperationService {
         entity.setScriptTimeoutMs(bo.getScriptTimeoutMs() == null ? 2_000 : bo.getScriptTimeoutMs());
         entity.setTimeoutMs(bo.getTimeoutMs());
         entity.setRetry(bo.getRetry() == null ? null : JsonUtils.toJson(bo.getRetry()));
+        String mode = bo.getCredentialMode() == null ? "INHERIT" : bo.getCredentialMode();
+        entity.setCredentialMode(mode);
+        // 非 OVERRIDE 时清掉凭证 id：否则把模式改回 INHERIT 后旧凭证还藏在行里，
+        // 下次有人把模式改回 OVERRIDE 就会拿到一条早已不同意的凭证。
+        entity.setCredentialId("OVERRIDE".equals(mode) ? bo.getCredentialId() : null);
         entity.setStatus(bo.getStatus() == null ? 1 : bo.getStatus());
     }
 
     private OperationVo toVo(ConnectorOperation entity) {
-        return OperationVo.of(entity,
+        OperationVo vo = OperationVo.of(entity,
                 entity.getQueryParams() == null ? Map.of() : JsonUtils.parseMap(entity.getQueryParams()),
                 entity.getHeaders() == null ? Map.of() : JsonUtils.parseMap(entity.getHeaders()),
                 entity.getResponseExtract() == null ? List.of() : JsonUtils.parseList(entity.getResponseExtract()),
                 entity.getRetry() == null ? Map.of() : JsonUtils.parseMap(entity.getRetry()));
+        // 只回名称不回密文：详情页要显示「用了哪条凭证」，而密钥永远在服务端
+        if (entity.getCredentialId() != null) {
+            PartnerCredential credential = credentialMapper.selectById(entity.getCredentialId());
+            if (credential != null) {
+                vo.setCredentialName(credential.getName());
+            }
+        }
+        return vo;
     }
 }

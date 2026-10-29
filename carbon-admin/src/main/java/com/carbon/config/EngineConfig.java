@@ -4,7 +4,7 @@ import com.carbon.common.json.JsonUtils;
 import com.carbon.framework.http.HttpExecutor;
 import com.carbon.framework.script.GroovySandbox;
 import com.carbon.framework.script.GroovySandboxOptions;
-import com.carbon.modules.engine.auth.AuthResolver;
+import com.carbon.modules.engine.credential.CredentialResolver;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
@@ -77,7 +77,7 @@ public class EngineConfig {
     }
 
     @Bean
-    public AuthResolver authResolver() {
-        return new AuthResolver();
+    public CredentialResolver credentialResolver() {
+        return new CredentialResolver();
     }
 }
