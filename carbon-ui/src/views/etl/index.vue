@@ -5,19 +5,19 @@ defineOptions({ name: "EtlHandlerList" });
 
 /**
  * ETL 处理器：参考系统把「前置/后置脚本」从接口里抽出来当资产复用（带版本、上下线、引用检查）。
- * carbon 目前脚本还内联在 connector_operation.pre_script / post_script 上，没有独立表，
+ * carbon 目前脚本还内联在 endpoint_operation.pre_script / post_script 上，没有独立表，
  * 所以这一页先老老实实说明现状，不假装有数据。
  */
 const planned = [
   {
     type: "前置 ETL",
     desc: "调三方之前加工入参：字段映射、单位换算、脱敏、拼签名",
-    anchor: "connector_operation.pre_script"
+    anchor: "endpoint_operation.pre_script"
   },
   {
     type: "后置 ETL",
     desc: "拿响应之后清洗：拍平嵌套、补默认值、算派生字段",
-    anchor: "connector_operation.post_script"
+    anchor: "endpoint_operation.post_script"
   },
   {
     type: "内置处理器",

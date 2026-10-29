@@ -18,6 +18,11 @@ export interface InvokeLog {
   flowRunId?: string;
   connectorId?: string;
   operationId?: string;
+  /** 合作方：由接入点反查，随日志一起落库 */
+  partnerId?: string;
+  /** 本次实际使用到的凭证；空 = 不鉴权 */
+  partnerCredentialId?: string;
+  credentialType?: string;
   method?: string;
   realUrl?: string;
   /** 已脱敏的请求头 JSON */

@@ -10,7 +10,7 @@ const STORAGE_KEY = "carbon-current-env";
 
 export const useEnvStore = defineStore("carbon-env", {
   state: () => ({
-    /** 当前环境编码，空串表示用连接器上配置的默认环境 */
+    /** 当前环境编码，空串表示用接入点上配置的默认环境 */
     current: (localStorage.getItem(STORAGE_KEY) ?? "") as string
   }),
   actions: {

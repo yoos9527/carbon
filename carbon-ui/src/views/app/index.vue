@@ -11,14 +11,14 @@ import {
   type AppItem,
   type AppUpdateForm
 } from "@/api/app";
-import { pageConnectors, type Connector } from "@/api/connector";
+import { pageEndpoints, type Endpoint } from "@/api/endpoint";
 import { showError } from "@/utils/http";
 
 defineOptions({ name: "AppList" });
 
 const loading = ref(false);
 const rows = ref<Array<AppItem>>([]);
-const connectors = ref<Array<Connector>>([]);
+const connectors = ref<Array<Endpoint>>([]);
 
 async function load() {
   loading.value = true;
@@ -33,7 +33,7 @@ async function load() {
 
 async function loadConnectors() {
   try {
-    const page = await pageConnectors({ pageNum: 1, pageSize: 100 });
+    const page = await pageEndpoints({ pageNum: 1, pageSize: 100 });
     connectors.value = page.rows ?? [];
   } catch (e) {
     showError(e);
@@ -227,7 +227,7 @@ onMounted(() => {
       show-icon
       class="mb-3"
       title="应用 = 网关调用方凭证"
-      description="业务系统拿 AppKey + Secret 对 /gw/** 做 HMAC-SHA256 签名。密钥只在创建与重置时明文显示一次，平台不留副本；连接器白名单留空表示不限制。"
+      description="业务系统拿 AppKey + Secret 对 /gw/** 做 HMAC-SHA256 签名。密钥只在创建与重置时明文显示一次，平台不留副本；接入点白名单留空表示不限制。"
     />
 
     <div class="mb-3 flex items-center gap-2">
@@ -257,7 +257,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="连接器白名单" min-width="220">
+      <el-table-column label="接入点白名单" min-width="220">
         <template #default="{ row }">
           <span
             v-if="!row.allowedConnectors?.length"
@@ -322,7 +322,7 @@ onMounted(() => {
         <el-form-item label="应用名" required>
           <el-input v-model="form.name" placeholder="如 订单中心 / 数据组" />
         </el-form-item>
-        <el-form-item label="连接器白名单">
+        <el-form-item label="接入点白名单">
           <el-select
             v-model="form.allowedConnectors"
             multiple
@@ -339,8 +339,8 @@ onMounted(() => {
             />
           </el-select>
           <div class="mt-1 text-xs text-gray-400">
-            不选表示不限制。选了之后，调用未授权的连接器会
-            403；编排入口会按流程实际引用到的连接器逐个校验。
+            不选表示不限制。选了之后，调用未授权的接入点会
+            403；编排入口会按流程实际引用到的接入点逐个校验。
           </div>
         </el-form-item>
         <el-form-item label="QPS 上限">

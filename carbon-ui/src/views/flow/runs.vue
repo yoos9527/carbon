@@ -17,7 +17,7 @@ import {
   type FlowStepRun
 } from "@/api/flow";
 import { MAX_PAGE_SIZE, PAGE_SIZES, labelOf, tagOf } from "@/api/common";
-import { pageConnectors, pageOperations } from "@/api/connector";
+import { pageEndpoints, pageOperations } from "@/api/endpoint";
 import { showError } from "@/utils/http";
 
 defineOptions({ name: "FlowRunList" });
@@ -175,7 +175,7 @@ function onDrawerClosed() {
   detailRunId.value = null;
 }
 
-/** 步骤里存的是 connectorId/operationId，名字得自己查（接口列表已按连接器缓存） */
+/** 步骤里存的是 connectorId/operationId，名字得自己查（接口列表已按接入点缓存） */
 const operationCache = new Map<string, Map<string, string>>();
 const connectorNames = ref<Map<string, string>>(new Map());
 
@@ -186,7 +186,7 @@ async function warmStepNames(steps: Array<FlowStepRun>) {
   const todo = ids.filter(id => !operationCache.has(id));
   if (!todo.length) return;
   try {
-    const page = await pageConnectors({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
+    const page = await pageEndpoints({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
     connectorNames.value = new Map(page.rows.map(c => [c.id, c.name]));
   } catch {
     // 名字查询失败不影响步骤本身的可读性
@@ -531,7 +531,7 @@ onMounted(async () => {
                 <span class="font-mono text-xs">{{ row.nodeType }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="连接器.接口" min-width="160">
+            <el-table-column label="接入点.接口" min-width="160">
               <template #default="{ row }">{{ stepTarget(row) }}</template>
             </el-table-column>
             <el-table-column label="重试" width="70">

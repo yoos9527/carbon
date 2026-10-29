@@ -8,11 +8,11 @@ import {
   createService,
   deleteServices,
   hasContract,
-  listAllConnectors,
+  listAllEndpoints,
   listServices,
   type ServiceItem
 } from "@/api/service";
-import type { Connector } from "@/api/connector";
+import type { Endpoint } from "@/api/endpoint";
 import { showError } from "@/utils/http";
 
 defineOptions({ name: "ServiceList" });
@@ -23,7 +23,7 @@ const route = useRoute();
 const loading = ref(false);
 const cardView = ref(true);
 const items = ref<Array<ServiceItem>>([]);
-const connectors = ref<Array<Connector>>([]);
+const connectors = ref<Array<Endpoint>>([]);
 const truncated = ref(false);
 
 const query = reactive({
@@ -45,7 +45,7 @@ async function load() {
         status: query.status,
         onlyNoContract: query.onlyNoContract
       }),
-      listAllConnectors()
+      listAllEndpoints()
     ]);
     items.value = result.items;
     truncated.value = result.truncated;
@@ -66,7 +66,7 @@ function reset() {
   load();
 }
 
-/** 按连接器分组，卡片区按"供应商"聚拢——运营看列表时先看是谁家的接口 */
+/** 按接入点分组，卡片区按"供应商"聚拢——运营看列表时先看是谁家的接口 */
 const grouped = computed(() => {
   const map = new Map<string, Array<ServiceItem>>();
   items.value.forEach(i => {
@@ -138,7 +138,7 @@ function openCreate() {
 
 async function save() {
   if (!form.connectorId) {
-    ElMessage.warning("先选一个连接器：接口必须挂在某个上游系统下");
+    ElMessage.warning("先选一个接入点：接口必须挂在某个上游系统下");
     return;
   }
   if (!form.name || !form.code || !form.path) {
@@ -166,7 +166,7 @@ async function save() {
 }
 
 onMounted(() => {
-  // 从连接器列表点「查看接口」会带 ?connectorId=，进来就得按它筛
+  // 从接入点列表点「查看接口」会带 ?connectorId=，进来就得按它筛
   if (typeof route.query.connectorId === "string") {
     query.connectorId = route.query.connectorId;
   }
@@ -208,8 +208,8 @@ onMounted(() => {
       type="warning"
       show-icon
       :closable="false"
-      title="连接器超过 200 个，本页只聚合了前 200 个"
-      description="继续增加连接器前请让后端提供 GET /api/services 平铺接口（设计文档 §2.2 方案 B）"
+      title="接入点超过 200 个，本页只聚合了前 200 个"
+      description="继续增加接入点前请让后端提供 GET /api/services 平铺接口（设计文档 §2.2 方案 B）"
     />
 
     <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -223,7 +223,7 @@ onMounted(() => {
       />
       <el-select
         v-model="query.connectorId"
-        placeholder="全部连接器"
+        placeholder="全部接入点"
         clearable
         filterable
         style="width: 200px"
@@ -267,7 +267,7 @@ onMounted(() => {
       <el-button type="primary" @click="openCreate">新增接口</el-button>
     </div>
 
-    <!-- 卡片视图：按连接器分组 -->
+    <!-- 卡片视图：按接入点分组 -->
     <div v-if="cardView" v-loading="loading">
       <div v-for="[group, rows] in grouped" :key="group" class="mb-5">
         <div class="mb-2 flex items-center gap-2">
@@ -361,7 +361,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="连接器" min-width="140">
+      <el-table-column label="接入点" min-width="140">
         <template #default="{ row }">{{ row.connectorName }}</template>
       </el-table-column>
       <el-table-column prop="path" label="路径" min-width="220">
@@ -402,7 +402,7 @@ onMounted(() => {
 
     <el-dialog v-model="dialog.visible" title="新增接口" width="560px">
       <el-form :model="form" label-width="100px">
-        <el-form-item label="连接器" required>
+        <el-form-item label="接入点" required>
           <el-select
             v-model="form.connectorId"
             filterable
@@ -423,7 +423,7 @@ onMounted(() => {
         <el-form-item label="编码" required>
           <el-input
             v-model="form.code"
-            placeholder="连接器内唯一，如 qcc_company"
+            placeholder="接入点内唯一，如 qcc_company"
           />
         </el-form-item>
         <el-form-item label="方法" required>
@@ -437,7 +437,7 @@ onMounted(() => {
             placeholder="/company/{{input.name}}（支持模板）"
           />
           <div class="mt-1 text-xs text-gray-400">
-            只写路径，域名由连接器的 Base URL + 环境决定
+            只写路径，域名由接入点的 Base URL + 环境决定
           </div>
         </el-form-item>
         <el-form-item label="Body 类型">

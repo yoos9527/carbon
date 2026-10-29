@@ -215,7 +215,7 @@ onMounted(load);
       show-icon
       class="mb-3"
       title="环境提供 {{env.xxx}} 变量"
-      description="连接器只配一份地址，域名差异写在环境里；连接器 base_url 用 https://{{env.host}} 即可切换环境。{{env.code}} 与 {{env.baseUrlPrefix}} 由平台自动注入，不要在变量表里重名。"
+      description="接入点只配一份地址，域名差异写在环境里；接入点 base_url 用 https://{{env.host}} 即可切换环境。{{env.code}} 与 {{env.baseUrlPrefix}} 由平台自动注入，不要在变量表里重名。"
     />
 
     <div class="mb-3 flex flex-wrap items-center gap-2">

@@ -78,7 +78,7 @@ const counts = computed(() => {
     // 没有 `to` 的卡片不可点：应用页还没做，别给一个跳 404 的入口
     {
       key: "connectors",
-      label: "连接器",
+      label: "接入点",
       value: c.connectors,
       to: "/connectors"
     },

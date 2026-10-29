@@ -1,19 +1,19 @@
 import { http, type TableDataInfo } from "@/utils/http";
 import { MAX_PAGE_SIZE } from "@/api/common";
 import {
-  pageConnectors,
+  pageEndpoints,
   pageOperations,
-  type Connector,
+  type Endpoint,
   type Operation
-} from "@/api/connector";
+} from "@/api/endpoint";
 
 /**
- * 数据源服务接口 = 接口 + 所属连接器。
+ * 数据源服务接口 = 接口 + 所属接入点 + 所属合作方。
  *
- * 后端**没有** `GET /api/services`：接口挂在 `/api/connectors/{connectorId}/operations`
- * 这条嵌套路径下。所以这个页面只能前端聚合——先拉连接器，再并发拉每个连接器的接口。
- * 这不是偷懒：连接器数量是"几十个"量级（设计文档 §2.2 方案 A），比改后端加一个
- * 平铺接口的收益更高。哪天连接器过百，就该让后端补 `GET /api/services`。
+ * 后端**没有** `GET /api/services`：接口挂在 `/api/endpoints/{connectorId}/operations`
+ * 这条嵌套路径下。所以这个页面只能前端聚合——先拉接入点，再并发拉每个接入点的接口。
+ * 这不是偷懒：接入点数量是"几十个"量级（设计文档 §2.2 方案 A），比改后端加一个
+ * 平铺接口的收益更高。哪天接入点过百，就该让后端补 `GET /api/services`。
  */
 export interface ServiceItem extends Operation {
   connectorCode: string;
@@ -21,6 +21,9 @@ export interface ServiceItem extends Operation {
   connectorStatus: number;
   connectorCategory?: string;
   baseUrl: string;
+  /** 所属合作方：密钥与商务关系都在这一层 */
+  partnerId?: string;
+  partnerName?: string;
 }
 
 export interface ServiceQuery {
@@ -43,15 +46,15 @@ export function hasContract(op: Operation) {
 }
 
 /**
- * 拉全部连接器。
+ * 拉全部接入点。
  * 超过单页上限时标记 truncated——此时列表不完整，页面必须显式提示，
- * 不能让用户以为"系统里只有 200 个连接器"。
+ * 不能让用户以为"系统里只有 200 个接入点"。
  */
-export async function listAllConnectors(): Promise<{
-  connectors: Array<Connector>;
+export async function listAllEndpoints(): Promise<{
+  connectors: Array<Endpoint>;
   truncated: boolean;
 }> {
-  const page = await pageConnectors({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
+  const page = await pageEndpoints({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
   return {
     connectors: page.rows,
     truncated: page.total > page.rows.length
@@ -84,12 +87,12 @@ export async function listServices(query: ServiceQuery = {}): Promise<{
   connectorTotal: number;
   truncated: boolean;
 }> {
-  const { connectors, truncated } = await listAllConnectors();
+  const { connectors, truncated } = await listAllEndpoints();
   const picked = query.connectorId
     ? connectors.filter(c => String(c.id) === query.connectorId)
     : connectors;
 
-  // 单连接器失败不能拖垮整页：某条连接器接口取不到就跳过，并记录其编码
+  // 单个接入点失败不能拖垮整页：某条接入点接口取不到就跳过，并记录其编码
   const failed: Array<string> = [];
   const groups = await mapLimit(picked, CONCURRENCY, async c => {
     try {
@@ -113,7 +116,9 @@ export async function listServices(query: ServiceQuery = {}): Promise<{
         connectorName: connector.name,
         connectorStatus: connector.status,
         connectorCategory: connector.category,
-        baseUrl: connector.baseUrl
+        baseUrl: connector.baseUrl,
+        partnerId: connector.partnerId,
+        partnerName: connector.partnerName
       });
     });
   });
@@ -135,7 +140,7 @@ export async function listServices(query: ServiceQuery = {}): Promise<{
 
   if (failed.length) {
     // 不抛异常：页面已经拿到部分数据，提示比整页白屏有用
-    console.warn("[services] 以下连接器的接口拉取失败：", failed.join(", "));
+    console.warn("[services] 以下接入点的接口拉取失败：", failed.join(", "));
   }
 
   return {
@@ -149,7 +154,7 @@ export async function listServices(query: ServiceQuery = {}): Promise<{
 /** 详情页按 id 取单个接口 */
 export function getService(connectorId: string, operationId: string) {
   return http.get<Operation>(
-    `/connectors/${connectorId}/operations/${operationId}`
+    `/endpoints/${connectorId}/operations/${operationId}`
   );
 }
 
@@ -159,17 +164,17 @@ export function updateService(
   body: Partial<Operation>
 ) {
   return http.put<void>(
-    `/connectors/${connectorId}/operations/${operationId}`,
+    `/endpoints/${connectorId}/operations/${operationId}`,
     body
   );
 }
 
 export function createService(connectorId: string, body: Partial<Operation>) {
-  return http.post<string>(`/connectors/${connectorId}/operations`, body);
+  return http.post<string>(`/endpoints/${connectorId}/operations`, body);
 }
 
 export function deleteServices(connectorId: string, ids: Array<string>) {
-  return http.delete<void>(`/connectors/${connectorId}/operations`, {
+  return http.delete<void>(`/endpoints/${connectorId}/operations`, {
     data: ids
   });
 }
@@ -194,7 +199,7 @@ export function invokeService(
 }
 
 /**
- * `connectorId:operationId` → `连接器名 / 接口名`。
+ * `connectorId:operationId` → `接入点名 / 接口名`。
  *
  * 调用日志里只存两个雪花 id，直接展示等于让运营对着数字猜——而日志量是
  * “每页几十条”，一次拉全量建 Map 比每行查一次接口便宜得多。

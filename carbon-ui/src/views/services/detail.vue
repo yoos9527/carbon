@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { getConnector, type Connector } from "@/api/connector";
-import type { Operation } from "@/api/connector";
+import { getEndpoint, type Endpoint } from "@/api/endpoint";
+import type { Operation } from "@/api/endpoint";
+import { listCredentials, type Credential } from "@/api/partner";
 import {
   BODY_TYPES,
   METHODS,
@@ -11,7 +12,7 @@ import {
   invokeService,
   updateService
 } from "@/api/service";
-import { ApiError, http, showError } from "@/utils/http";
+import { ApiError, showError } from "@/utils/http";
 import { useEnvStoreHook } from "@/store/modules/env";
 
 defineOptions({ name: "ServiceDetail" });
@@ -22,13 +23,28 @@ const envStore = useEnvStoreHook();
 const connectorId = String(route.params.connectorId);
 const operationId = String(route.params.operationId);
 
-const activeTab = ref("basic");
 const loading = ref(false);
 const saving = ref(false);
-const connector = ref<Connector>();
+const dirty = ref(false);
+const connector = ref<Endpoint>();
 const operation = ref<Operation>();
+const credentials = ref<Array<Credential>>([]);
 
-/** JSON 编辑器统一走字符串：格式化/校验都在提交时一次做完，避免每敲一个字就 parse */
+/**
+ * 分步而不是平铺 Tab：一屏只看一件事，改完走到下一步，回来也知道自己停在哪。
+ * 步骤是所有字段的子集分组，不改变后端契约。
+ */
+const STEPS = [
+  { key: "basic", title: "基础配置", hint: "名称、标识、请求地址" },
+  { key: "contract", title: "出入参契约", hint: "下游可用的出参字段" },
+  { key: "script", title: "脚本处理", hint: "前后置 Groovy" },
+  { key: "credential", title: "凭证", hint: "继承 / 指定 / 不鉴权" },
+  { key: "runtime", title: "超时与重试", hint: "留空继承接入点" },
+  { key: "debug", title: "试调", hint: "只渲染 / 真发一次" }
+] as const;
+const step = ref(0);
+const advanced = ref(false);
+
 const form = reactive({
   name: "",
   code: "",
@@ -44,6 +60,9 @@ const form = reactive({
   scriptTimeoutMs: 2000,
   timeoutMs: undefined as number | undefined,
   status: 0,
+  /** 凭证三选一：接口这一层只决定「用哪一条」，密钥本身在合作方 */
+  credentialMode: "INHERIT",
+  credentialId: "" as string,
   /** 出参契约用表格编辑，比让用户手写 JSON 数组友好得多 */
   responseExtract: [] as Array<{
     name: string;
@@ -70,6 +89,8 @@ function fill(op: Operation) {
   form.scriptTimeoutMs = op.scriptTimeoutMs ?? 2000;
   form.timeoutMs = op.timeoutMs ?? undefined;
   form.status = op.status ?? 0;
+  form.credentialMode = op.credentialMode || "INHERIT";
+  form.credentialId = op.credentialId || "";
   form.responseExtract = Array.isArray(op.responseExtract)
     ? (op.responseExtract as Array<Record<string, string>>).map(i => ({
         name: String(i.name ?? ""),
@@ -77,6 +98,8 @@ function fill(op: Operation) {
         default: i.default == null ? "" : String(i.default)
       }))
     : [];
+  // fill 会触发深层 watch，标记要在下一拍清掉，否则一进来就显示「未保存」
+  nextTick(() => (dirty.value = false));
 }
 
 async function load() {
@@ -84,10 +107,14 @@ async function load() {
   try {
     const [op, conn] = await Promise.all([
       getService(connectorId, operationId),
-      getConnector(connectorId)
+      getEndpoint(connectorId)
     ]);
     connector.value = conn;
     fill(op);
+    // 凭证下拉只需要同一个合作方下的那几条
+    if (conn.partnerId) {
+      credentials.value = await listCredentials(conn.partnerId);
+    }
   } catch (e) {
     showError(e);
   } finally {
@@ -95,7 +122,7 @@ async function load() {
   }
 }
 
-/** 允许留空：留空 = 继承连接器默认，不是「设为 0」 */
+/** 允许留空：留空 = 继承接入点默认，不是「设为 0」 */
 function parseJsonObject(text: string, label: string) {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -115,6 +142,7 @@ function parseJsonObject(text: string, label: string) {
 async function save() {
   if (!form.name || !form.code || !form.path) {
     ElMessage.warning("名称、编码、路径必填");
+    step.value = 0;
     return;
   }
   const queryParams = parseJsonObject(form.queryParams, "Query 参数");
@@ -127,7 +155,8 @@ async function save() {
     i => (i.name && !i.jsonpath) || (!i.name && i.jsonpath)
   );
   if (bad) {
-    ElMessage.warning("出参契约里每一行的「字段名」和「JSONPath」必须成对填写");
+    ElMessage.warning("出参契约里每一行的「字段标识」和「JSONPath」必须成对填写");
+    step.value = 1;
     return;
   }
   const named = form.responseExtract
@@ -135,6 +164,7 @@ async function save() {
     .map(i => i.name.toLowerCase());
   if (new Set(named).size !== named.length) {
     ElMessage.warning("出参字段名不能重复（下游节点按名取值）");
+    step.value = 1;
     return;
   }
 
@@ -155,6 +185,9 @@ async function save() {
       scriptTimeoutMs: form.scriptTimeoutMs,
       timeoutMs: form.timeoutMs ?? undefined,
       status: form.status,
+      credentialMode: form.credentialMode,
+      credentialId:
+        form.credentialMode === "OVERRIDE" ? form.credentialId : undefined,
       responseExtract: form.responseExtract
         .filter(i => i.name)
         .map(i => ({
@@ -235,185 +268,301 @@ function removeContractRow(index: number) {
   form.responseExtract.splice(index, 1);
 }
 
+const contractCount = computed(
+  () => form.responseExtract.filter(i => i.name).length
+);
+const advancedCount = computed(
+  () =>
+    [form.queryParams, form.headers, form.bodyTemplate].filter(s => s.trim())
+      .length
+);
+const actualUrl = computed(
+  () => `${form.method} ${connector.value?.baseUrl ?? ""}${form.path}`
+);
+
+watch(form, () => (dirty.value = true), { deep: true });
+
 onMounted(load);
 </script>
 
 <template>
-  <div v-loading="loading" class="p-4">
-    <el-breadcrumb class="mb-3" separator="/">
-      <el-breadcrumb-item :to="{ path: '/services' }">
-        数据源服务接口
-      </el-breadcrumb-item>
-      <el-breadcrumb-item>{{
-        operation?.name || operationId
-      }}</el-breadcrumb-item>
-    </el-breadcrumb>
-
-    <el-descriptions v-if="connector" :column="3" border class="mb-4">
-      <el-descriptions-item label="所属连接器">
-        {{ connector.name }}
-        <span class="font-mono text-xs text-gray-400">
-          （{{ connector.code }}）
-        </span>
-      </el-descriptions-item>
-      <el-descriptions-item label="Base URL">
-        <span class="font-mono text-xs">{{ connector.baseUrl }}</span>
-      </el-descriptions-item>
-      <el-descriptions-item label="实际请求">
-        <span class="font-mono text-xs">
-          {{ form.method }} {{ connector.baseUrl }}{{ form.path }}
-        </span>
-      </el-descriptions-item>
-    </el-descriptions>
-
-    <el-tabs v-model="activeTab" type="border-card">
-      <!-- 1 基础 -->
-      <el-tab-pane label="基础" name="basic">
-        <el-form :model="form" label-width="120px" class="max-w-3xl">
-          <el-form-item label="接口名称" required>
-            <el-input v-model="form.name" />
-          </el-form-item>
-          <el-form-item label="接口编码" required>
-            <el-input v-model="form.code" placeholder="连接器内唯一" />
-            <div class="mt-1 text-xs text-gray-400">
-              编码被编排节点引用，改动会让已有流程失效
-            </div>
-          </el-form-item>
-          <el-form-item label="方法" required>
-            <el-select v-model="form.method" style="width: 160px">
-              <el-option v-for="m in METHODS" :key="m" :label="m" :value="m" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="路径" required>
-            <el-input v-model="form.path" placeholder="/company/{{input.name}}" />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-switch
-              v-model="form.status"
-              :active-value="1"
-              :inactive-value="0"
-              active-text="启用"
-              inactive-text="草稿"
-            />
-            <span class="ml-3 text-xs text-gray-400">
-              草稿状态的接口不能被编排与网关调用
-            </span>
-          </el-form-item>
-          <el-form-item label="Query 参数">
-            <el-input
-              v-model="form.queryParams"
-              type="textarea"
-              :rows="4"
-              class="font-mono"
-              placeholder='{"key":"{{input.key}}"}'
-            />
-          </el-form-item>
-          <el-form-item label="Headers">
-            <el-input
-              v-model="form.headers"
-              type="textarea"
-              :rows="4"
-              class="font-mono"
-              placeholder='{"X-Trace":"{{ctx.traceId}}"}'
-            />
-          </el-form-item>
-          <el-form-item label="Body 类型">
-            <el-select v-model="form.bodyType" style="width: 200px">
-              <el-option
-                v-for="t in BODY_TYPES"
-                :key="t.value"
-                :label="t.label"
-                :value="t.value"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="Body 模板">
-            <el-input
-              v-model="form.bodyTemplate"
-              type="textarea"
-              :rows="8"
-              class="font-mono"
-              placeholder='{"name":"{{input.companyName}}"}'
-            />
-            <div class="mt-1 text-xs text-gray-400">
-              JSON 模板：先解析成树再逐叶子替换，保证类型与转义正确（不是字符串拼接）
-            </div>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
-
-      <!-- 2 出参契约 -->
-      <el-tab-pane label="出参契约" name="contract">
-        <el-alert
-          class="mb-3"
-          type="info"
-          :closable="false"
-          show-icon
-          title="出参契约是编排的基础"
-          description="这里声明的每个字段，会成为下游节点可选的上游出参。不声明就只能靠脚本硬塞，节点出参池里看不到它。"
-        />
-        <el-table :data="form.responseExtract" border size="small">
-          <el-table-column label="字段名" min-width="180">
-            <template #default="{ row }">
-              <el-input v-model="row.name" size="small" placeholder="companyName" />
-            </template>
-          </el-table-column>
-          <el-table-column label="JSONPath" min-width="220">
-            <template #default="{ row }">
-              <el-input
-                v-model="row.jsonpath"
-                size="small"
-                class="font-mono"
-                placeholder="$.data.name"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="默认值" min-width="140">
-            <template #default="{ row }">
-              <el-input v-model="row.default" size="small" placeholder="缺失时使用" />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="90">
-            <template #default="{ $index }">
-              <el-button
-                link
-                type="danger"
-                size="small"
-                @click="removeContractRow($index)"
-              >
-                删除
-              </el-button>
-            </template>
-          </el-table-column>
-          <template #empty>
-            <el-empty description="还没有声明出参字段" />
-          </template>
-        </el-table>
-        <div class="mt-2">
-          <el-button size="small" @click="addContractRow">新增一行</el-button>
+  <div v-loading="loading" class="svc" :class="{ 'is-on': form.status === 1 }">
+    <!-- 头：接口身份 + 实际请求，不放卡片，靠字重和等宽区分层级 -->
+    <header class="svc-head">
+      <el-breadcrumb class="mb-2" separator="/">
+        <el-breadcrumb-item :to="{ path: '/services' }">
+          数据源服务接口
+        </el-breadcrumb-item>
+        <el-breadcrumb-item>{{
+          operation?.name || operationId
+        }}</el-breadcrumb-item>
+      </el-breadcrumb>
+      <div class="svc-head__row">
+        <div class="min-w-0">
+          <h1 class="svc-head__name">
+            {{ form.name || "未命名接口" }}
+            <span class="svc-head__code">{{ form.code || "-" }}</span>
+          </h1>
+          <p class="svc-head__url">{{ actualUrl }}</p>
         </div>
-        <el-alert
-          class="mt-3"
-          type="warning"
-          :closable="false"
-          show-icon
-          title="入参 schema 待后端加列"
-          description="入参侧的字段结构与类型（docs/09 §7 的 input_schema）需要先执行 V6 迁移。在那之前，入参靠 Query 参数 / Body 模板里的占位符表达。"
-        />
-      </el-tab-pane>
+        <div class="svc-head__aside">
+          <span class="svc-tag" :class="form.status === 1 ? 'is-on' : 'is-off'">
+            {{ form.status === 1 ? "启用" : "草稿" }}
+          </span>
+          <span class="svc-head__conn">
+            接入点 {{ connector?.name }}
+            <span v-if="connector?.code !== connector?.name" class="mono">
+              {{ connector?.code }}</span
+            >
+          </span>
+        </div>
+      </div>
+    </header>
 
-      <!-- 3 脚本 -->
-      <el-tab-pane label="脚本" name="script">
-        <el-alert
-          class="mb-3"
-          type="info"
-          :closable="false"
-          show-icon
-          title="脚本在模板渲染之前执行"
-          description="前置脚本可改 ctx.request / ctx.vars，后置脚本可改 ctx.response / ctx.vars。脚本先于 URL 渲染是有意为之——否则脚本就能改掉请求地址，等于开了后门。"
-        />
-        <el-form label-width="120px">
-          <el-form-item label="前置脚本">
+    <!-- 步骤条：自绘，数字等宽，当前步用下划线而不是胶囊 -->
+    <nav class="svc-steps">
+      <button
+        v-for="(s, i) in STEPS"
+        :key="s.key"
+        type="button"
+        class="svc-step"
+        :class="{ 'is-active': step === i, 'is-done': i < step }"
+        @click="step = i"
+      >
+        <span class="svc-step__no">{{ String(i + 1).padStart(2, "0") }}</span>
+        <span class="svc-step__text">
+          <span class="svc-step__title">{{ s.title }}</span>
+          <span class="svc-step__hint">{{ s.hint }}</span>
+        </span>
+        <span v-if="i === 1 && contractCount" class="svc-step__badge">
+          {{ contractCount }}
+        </span>
+      </button>
+    </nav>
+
+    <div class="svc-body">
+      <!-- ① 基础配置 -->
+      <section v-show="step === 0" class="fields">
+        <div class="field">
+          <label class="field__label">接口名称<i>*</i></label>
+          <div class="field__body">
+            <el-input v-model="form.name" style="width: 340px" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label">接口标识<i>*</i></label>
+          <div class="field__body">
+            <el-input
+              v-model="form.code"
+              style="width: 260px"
+              class="font-mono"
+              placeholder="接入点内唯一"
+            />
+            <p class="field__help">
+              编排节点按标识引用它，改名会让已有流程找不到接口。
+            </p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label">请求地址<i>*</i></label>
+          <div class="field__body">
+            <div class="flex items-start gap-2">
+              <el-select v-model="form.method" style="width: 104px">
+                <el-option
+                  v-for="m in METHODS"
+                  :key="m"
+                  :label="m"
+                  :value="m"
+                />
+              </el-select>
+              <el-input
+                v-model="form.path"
+                class="font-mono"
+                placeholder="/company/{{input.name}}"
+              />
+            </div>
+            <p class="field__help">
+              拼在 Base URL 之后；<code class="mono">&#123;&#123;input.x&#125;&#125;</code>
+              用双大括号取入参，渲染发生在脚本之后。
+            </p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label">状态</label>
+          <div class="field__body">
+            <div class="flex items-center gap-3">
+              <el-switch
+                v-model="form.status"
+                :active-value="1"
+                :inactive-value="0"
+              />
+              <span class="field__help mt-0">
+                {{ form.status === 1 ? "当前启用" : "当前是草稿" }}——草稿状态的接口不能被编排与网关调用。
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label" />
+          <div class="field__body">
+            <button
+              type="button"
+              class="svc-disclose"
+              @click="advanced = !advanced"
+            >
+              <span>{{ advanced ? "收起高级配置" : "高级配置" }}</span>
+              <span class="svc-disclose__count">
+                Query / Headers / Body<span v-if="advancedCount">
+                  · 已配 {{ advancedCount }} 项</span
+                >
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <template v-if="advanced">
+          <div class="field">
+            <label class="field__label">Query 参数</label>
+            <div class="field__body">
+              <el-input
+                v-model="form.queryParams"
+                type="textarea"
+                :rows="4"
+                class="font-mono"
+                placeholder='{"key":"{{input.key}}"}'
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field__label">Headers</label>
+            <div class="field__body">
+              <el-input
+                v-model="form.headers"
+                type="textarea"
+                :rows="4"
+                class="font-mono"
+                placeholder='{"X-Trace":"{{ctx.traceId}}"}'
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field__label">Body 类型</label>
+            <div class="field__body">
+              <el-select v-model="form.bodyType" style="width: 200px">
+                <el-option
+                  v-for="t in BODY_TYPES"
+                  :key="t.value"
+                  :label="t.label"
+                  :value="t.value"
+                />
+              </el-select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field__label">Body 模板</label>
+            <div class="field__body">
+              <el-input
+                v-model="form.bodyTemplate"
+                type="textarea"
+                :rows="8"
+                class="font-mono"
+                placeholder='{"name":"{{input.companyName}}"}'
+              />
+              <p class="field__help">
+                JSON 模板先解析成树再逐叶子替换，保证类型与转义正确，不是字符串拼接。
+              </p>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <!-- ② 出入参契约 -->
+      <section v-show="step === 1">
+        <div class="svc-lead">
+          出参契约是编排的基础：这里声明的每个字段，都会成为下游节点可选的上游出参；不声明就只能靠脚本硬塞，节点出参池里看不到它。
+        </div>
+
+        <div class="svc-table">
+          <el-table :data="form.responseExtract" size="small" :border="false">
+            <el-table-column label="字段标识" min-width="200">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.name"
+                  size="small"
+                  class="font-mono"
+                  placeholder="companyName"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="JSONPath" min-width="240">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.jsonpath"
+                  size="small"
+                  class="font-mono"
+                  placeholder="$.data.name"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="默认值" min-width="160">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.default"
+                  size="small"
+                  placeholder="缺失时使用"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="" width="72" align="right">
+              <template #default="{ $index }">
+                <el-button
+                  link
+                  type="danger"
+                  size="small"
+                  @click="removeContractRow($index)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <div class="svc-empty">
+                还没有声明出参字段。点下面的「新增字段」，从响应 JSON 里挑几个下游要用的值。
+              </div>
+            </template>
+          </el-table>
+        </div>
+
+        <div class="mt-3 flex items-center gap-3">
+          <el-button size="small" @click="addContractRow">新增字段</el-button>
+          <span class="text-xs text-[var(--svc-muted)]">
+            已声明 {{ contractCount }} 个出参；字段名重复会被拦下。
+          </span>
+        </div>
+
+        <div class="svc-note">
+          入参侧还没有结构定义（后端 <span class="mono">endpoint_operation</span>
+          缺 <span class="mono">input_schema</span> 列，见 docs/09 §7 的 V6 迁移）。
+          在那之前，入参靠 Query 参数与 Body 模板里的占位符表达。
+        </div>
+      </section>
+
+      <!-- ③ 脚本 -->
+      <section v-show="step === 2" class="fields">
+        <div class="svc-lead">
+          脚本在模板渲染之前执行：前置脚本可改
+          <span class="mono">ctx.request</span> /
+          <span class="mono">ctx.vars</span>，后置脚本可改
+          <span class="mono">ctx.response</span> /
+          <span class="mono">ctx.vars</span>。先于 URL 渲染是有意为之——否则脚本就能改掉请求地址，等于开了后门。
+        </div>
+        <div class="field">
+          <label class="field__label">前置脚本</label>
+          <div class="field__body">
             <el-input
               v-model="form.preScript"
               type="textarea"
@@ -421,8 +570,11 @@ onMounted(load);
               class="font-mono"
               placeholder="// ctx.vars.xxx = ..."
             />
-          </el-form-item>
-          <el-form-item label="后置脚本">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">后置脚本</label>
+          <div class="field__body">
             <el-input
               v-model="form.postScript"
               type="textarea"
@@ -430,33 +582,99 @@ onMounted(load);
               class="font-mono"
               placeholder="// ctx.response.body.xxx = ..."
             />
-          </el-form-item>
-          <el-form-item label="脚本超时(ms)">
-            <el-input-number
-              v-model="form.scriptTimeoutMs"
-              :min="100"
-              :step="100"
-            />
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">脚本超时</label>
+          <div class="field__body">
+            <div class="flex items-center gap-2">
+              <el-input-number
+                v-model="form.scriptTimeoutMs"
+                :min="100"
+                :step="100"
+                style="width: 160px"
+              />
+              <span class="field__help mt-0">毫秒</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <!-- 4 超时与重试 -->
-      <el-tab-pane label="超时与重试" name="runtime">
-        <el-form label-width="140px" class="max-w-2xl">
-          <el-form-item label="接口超时(ms)">
-            <el-input-number
-              v-model="form.timeoutMs"
-              :min="0"
-              :step="500"
-              :value-on-clear="undefined"
-              placeholder="留空继承连接器"
-            />
-            <span class="ml-3 text-xs text-gray-400">
-              留空 = 继承连接器的 {{ connector?.timeoutMs ?? "-" }} ms
-            </span>
-          </el-form-item>
-          <el-form-item label="重试策略(JSON)">
+      <!-- ④ 凭证 -->
+      <section v-show="step === 3" class="fields">
+        <div class="field">
+          <label class="field__label">凭证来源</label>
+          <div class="field__body">
+            <el-radio-group v-model="form.credentialMode">
+              <el-radio-button value="INHERIT">继承</el-radio-button>
+              <el-radio-button value="OVERRIDE">指定凭证</el-radio-button>
+              <el-radio-button value="NONE">不鉴权</el-radio-button>
+            </el-radio-group>
+            <p class="field__help">
+              <template v-if="form.credentialMode === 'INHERIT'">
+                先用接入点「{{ connector?.name }}" 的默认凭证（{{
+                  connector?.credentialName || "未指定"
+                }}），没有就用合作方默认凭证；都没有则不鉴权。
+              </template>
+              <template v-else-if="form.credentialMode === 'OVERRIDE'">
+                这个接口要用另一套密钥（比如查询和回传是两套授权）。
+              </template>
+              <template v-else>
+                本接口完全不发鉴权信息。公开接口选这个，
+                别把 key 留在接入点上白送第三方。
+              </template>
+            </p>
+          </div>
+        </div>
+        <div v-if="form.credentialMode === 'OVERRIDE'" class="field">
+          <label class="field__label">选择凭证</label>
+          <div class="field__body">
+            <el-select
+              v-model="form.credentialId"
+              placeholder="选一条凭证"
+              style="width: 340px"
+            >
+              <el-option
+                v-for="c in credentials"
+                :key="c.id"
+                :label="`${c.name}（${c.type}）`"
+                :value="c.id"
+              />
+            </el-select>
+            <p class="field__help">
+              只能选同一合作方下的凭证；找不到就去
+              <a class="text-blue-600" @click="router.push(`/partners/${connector?.partnerId}/credentials`)">
+                合作方凭证页
+              </a>
+              新建。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ⑤ 超时与重试 -->
+      <section v-show="step === 4" class="fields">
+        <div class="field">
+          <label class="field__label">接口超时</label>
+          <div class="field__body">
+            <div class="flex items-center gap-2">
+              <el-input-number
+                v-model="form.timeoutMs"
+                :min="0"
+                :step="500"
+                :value-on-clear="undefined"
+                placeholder="留空继承"
+                style="width: 160px"
+              />
+              <span class="field__help mt-0">
+                留空 = 继承接入点的 {{ connector?.timeoutMs ?? "-" }} ms
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">重试策略</label>
+          <div class="field__body">
             <el-input
               v-model="form.retry"
               type="textarea"
@@ -464,24 +682,22 @@ onMounted(load);
               class="font-mono"
               placeholder='{"maxAttempts":3,"backoffMs":200}'
             />
-            <div class="mt-1 text-xs text-gray-400">
-              留空 = 继承连接器；只对幂等方法（GET/HEAD）建议开启
-            </div>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
+            <p class="field__help">
+              留空 = 继承接入点；只对幂等方法（GET / HEAD）建议开启。
+            </p>
+          </div>
+        </div>
+      </section>
 
-      <!-- 5 试调 -->
-      <el-tab-pane label="试调" name="debug">
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <!-- ⑥ 试调 -->
+      <section v-show="step === 5" class="max-w-[1040px]">
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div>
-            <div class="mb-2 flex items-center gap-2">
-              <span class="font-medium">入参 JSON</span>
-              <el-button link type="primary" @click="fillSampleInput">
+            <div class="svc-subhead">
+              <span>入参 JSON</span>
+              <el-button link type="primary" size="small" @click="fillSampleInput">
                 按契约生成骨架
               </el-button>
-              <div class="flex-1" />
-              <el-switch v-model="debug.dryRun" active-text="只渲染" />
             </div>
             <el-input
               v-model="debug.input"
@@ -489,24 +705,23 @@ onMounted(load);
               :rows="14"
               class="font-mono"
             />
-            <div class="mt-2 flex items-center gap-2">
-              <el-button
-                type="primary"
-                :loading="debug.sending"
-                @click="send"
-              >
+            <div class="mt-3 flex items-center gap-3">
+              <el-button type="primary" :loading="debug.sending" @click="send">
                 {{ debug.dryRun ? "只渲染请求" : "发送" }}
               </el-button>
-              <span v-if="envStore.current" class="text-xs text-gray-400">
-                环境：{{ envStore.current }}
-              </span>
+              <el-checkbox v-model="debug.dryRun">只渲染，不发请求</el-checkbox>
             </div>
-            <div class="mt-2 text-xs text-gray-400">
-              「只渲染」不真正请求三方，只回显将要发出的请求——排查模板问题最快的一条路。
-            </div>
+            <p v-if="envStore.current" class="field__help">
+              环境：<span class="mono">{{ envStore.current }}</span>
+            </p>
           </div>
           <div>
-            <div class="mb-2 font-medium">结果</div>
+            <div class="svc-subhead">
+              <span>结果</span>
+              <span v-if="debug.result" class="svc-subhead__meta mono">
+                {{ debug.costMs }} ms
+              </span>
+            </div>
             <el-alert
               v-if="debug.error"
               :title="`${debug.error.code} · ${debug.error.message}`"
@@ -517,25 +732,354 @@ onMounted(load);
               :closable="false"
               show-icon
             />
-            <pre
-              v-else-if="debug.result"
-              class="max-h-[420px] overflow-auto rounded bg-gray-50 p-3 text-xs dark:bg-gray-800"
-              >{{ pretty(debug.result) }}</pre
-            >
-            <div v-else class="text-xs text-gray-400">还没有发送</div>
-            <div v-if="debug.result" class="mt-1 text-xs text-gray-400">
-              总耗时 {{ debug.costMs }} ms
-            </div>
+            <pre v-else-if="debug.result" class="svc-pre">{{ pretty(debug.result) }}</pre>
+            <div v-else class="svc-empty svc-empty--box">还没有发送</div>
           </div>
         </div>
-      </el-tab-pane>
-    </el-tabs>
-
-    <div class="mt-4 flex items-center gap-2">
-      <el-button type="primary" :loading="saving" @click="save">
-        保存
-      </el-button>
-      <el-button @click="router.push('/services')">返回列表</el-button>
+      </section>
     </div>
+
+    <!-- 底部操作条：固定，带未保存标记 -->
+    <footer class="svc-bar">
+      <span class="svc-bar__state">
+        <span v-if="dirty" class="svc-dot" />{{
+          dirty ? "有未保存的改动" : "已保存"
+        }}
+      </span>
+      <div class="flex-1" />
+      <el-button v-if="step > 0" @click="step--">上一步</el-button>
+      <el-button v-if="step < STEPS.length - 1" @click="step++">
+        下一步
+      </el-button>
+      <el-button :loading="saving" type="primary" @click="save">保存</el-button>
+      <el-button @click="router.push('/services')">返回列表</el-button>
+    </footer>
   </div>
 </template>
+
+<style scoped>
+.svc {
+  --svc-ink: #15171a;
+  --svc-muted: #6b7280;
+  --svc-line: #e4e4e1;
+  --svc-line-soft: #f0f0ed;
+  --svc-signal: #1d4ed8;
+  --svc-paper: #f6f6f4;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  background: var(--svc-paper);
+  color: var(--svc-ink);
+  /* 顶部 2px 色条 = 接口状态，不用再去找标签 */
+  --svc-status: #b45309;
+}
+.svc.is-on {
+  --svc-status: #0f766e;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-variant-ligatures: none;
+}
+
+/* ---------- 头部 ---------- */
+.svc-head {
+  padding: 16px 28px 14px;
+  background: #fff;
+  border-top: 2px solid var(--svc-status, transparent);
+  border-bottom: 1px solid var(--svc-line);
+}
+.svc-head__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.svc-head__name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.svc-head__code {
+  margin-left: 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--svc-muted);
+  vertical-align: 2px;
+}
+.svc-head__url {
+  margin: 4px 0 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--svc-muted);
+  overflow-wrap: anywhere;
+}
+.svc-head__aside {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  padding-top: 2px;
+  font-size: 12px;
+  color: var(--svc-muted);
+  white-space: nowrap;
+}
+.svc-head__conn .mono {
+  color: var(--svc-ink);
+}
+.svc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 7px;
+  font-size: 12px;
+  border: 1px solid currentcolor;
+  border-radius: 2px;
+}
+.svc-tag.is-on {
+  color: #0f766e;
+}
+.svc-tag.is-off {
+  color: #b45309;
+}
+
+/* ---------- 步骤条 ---------- */
+.svc-steps {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 22px;
+  background: #fff;
+  border-bottom: 1px solid var(--svc-line);
+}
+.svc-step {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 12px 16px 11px 0;
+  margin-right: 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: var(--svc-muted);
+  transition: color 0.15s ease;
+}
+.svc-step:hover {
+  color: var(--svc-ink);
+}
+.svc-step__no {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: inherit;
+  opacity: 0.7;
+}
+.svc-step__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.svc-step__title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+}
+.svc-step__hint {
+  font-size: 11.5px;
+  color: var(--svc-muted);
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.svc-step.is-active {
+  color: var(--svc-ink);
+  border-bottom-color: var(--svc-signal);
+}
+.svc-step.is-done .svc-step__title {
+  color: var(--svc-ink);
+}
+.svc-step__badge {
+  align-self: center;
+  padding: 0 5px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--svc-signal);
+  border: 1px solid rgb(29 78 216 / 35%);
+  border-radius: 2px;
+}
+
+/* ---------- 表单主体 ---------- */
+.svc-body {
+  flex: 1;
+  padding: 24px 28px 28px;
+}
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 940px;
+}
+.field {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.field__label {
+  padding-top: 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--svc-ink);
+  text-align: right;
+}
+.field__label i {
+  margin-left: 3px;
+  font-style: normal;
+  color: #b91c1c;
+}
+.field__body {
+  min-width: 0;
+}
+.field__help {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--svc-muted);
+}
+.field__help.mt-0 {
+  margin-top: 0;
+}
+.field__help code,
+.svc-note .mono,
+.svc-lead .mono {
+  padding: 0 3px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  background: #f1f1ee;
+  border-radius: 2px;
+}
+
+/* 披露块 */
+.svc-disclose {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 9px 0;
+  font-size: 13px;
+  color: var(--svc-ink);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--svc-line-soft);
+  cursor: pointer;
+}
+.svc-disclose__count {
+  font-size: 12px;
+  color: var(--svc-muted);
+}
+
+/* 引导句 / 提示块 */
+.svc-lead {
+  max-width: 76ch;
+  margin-bottom: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #3f4348;
+}
+.svc-note {
+  max-width: 76ch;
+  margin-top: 20px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--svc-muted);
+  background: #fbfbf9;
+  border-left: 2px solid var(--svc-line);
+}
+.svc-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.svc-subhead__meta {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--svc-muted);
+}
+
+/* 表格：去掉卡片边框，改靠表头底线 + 行底线 */
+.svc-table :deep(.el-table) {
+  background: #fff;
+}
+.svc-table :deep(.el-table th.el-table__cell) {
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--svc-muted);
+  background: #fff;
+  border-bottom: 1px solid var(--svc-line);
+}
+.svc-table :deep(.el-table td.el-table__cell) {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--svc-line-soft);
+}
+.svc-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+.svc-empty {
+  padding: 22px 4px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--svc-muted);
+}
+.svc-empty--box {
+  padding: 18px;
+  background: #fff;
+  border: 1px dashed var(--svc-line);
+}
+.svc-pre {
+  max-height: 360px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #fff;
+  border: 1px solid var(--svc-line);
+}
+
+/* ---------- 底部操作条 ---------- */
+.svc-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: rgb(255 255 255 / 92%);
+  border-top: 1px solid var(--svc-line);
+  backdrop-filter: blur(6px);
+}
+.svc-bar__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--svc-muted);
+}
+.svc-dot {
+  width: 5px;
+  height: 5px;
+  background: #b45309;
+  border-radius: 50%;
+}
+</style>

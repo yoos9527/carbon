@@ -12,8 +12,8 @@ import LogicFlow, {
 import "@logicflow/core/lib/style/index.css";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { getFlow, validateFlowDsl, updateFlow, publishFlow, runFlowAsync, type Flow, type ValidationError } from "@/api/flow";
-import { listAllConnectors } from "@/api/service";
-import { pageOperations, type Connector, type Operation } from "@/api/connector";
+import { listAllEndpoints } from "@/api/service";
+import { pageOperations, type Endpoint, type Operation } from "@/api/endpoint";
 import { showError } from "@/utils/http";
 
 defineOptions({ name: "FlowDesign" });
@@ -110,7 +110,7 @@ const prop = reactive({
   backoffMs: 500
 });
 
-const connectors = ref<Array<Connector>>([]);
+const connectors = ref<Array<Endpoint>>([]);
 const operations = ref<Array<Operation>>();
 
 let idSeq = 1;
@@ -375,12 +375,24 @@ async function loadFlow() {
 
 async function loadConnectors() {
   try {
-    const { connectors: list } = await listAllConnectors();
+    const { connectors: list } = await listAllEndpoints();
     connectors.value = list.filter(c => c.status === 1);
   } catch {
-    // 拉不到连接器不影响画布，只影响右侧下拉
+    // 拉不到接入点不影响画布，只影响右侧下拉
   }
 }
+
+/** 画布上的接入点按合作方分组展示：选的时候人想的是「哪家公司的接口」 */
+const connectorGroups = computed(() => {
+  const map = new Map<string, { name: string; items: Array<Endpoint> }>();
+  connectors.value.forEach(c => {
+    const key = c.partnerId ?? "-";
+    const name = c.partnerName || "未分组";
+    if (!map.has(key)) map.set(key, { name, items: [] });
+    map.get(key)!.items.push(c);
+  });
+  return [...map.values()];
+});
 
 async function loadOperations(connectorId: string) {
   operations.value = undefined;
@@ -786,21 +798,30 @@ function paletteClick(kind: Kind) {
             </el-form-item>
 
             <template v-if="selected.kind === KIND.CALL && !selected.foreign">
-              <el-form-item label="连接器">
+              <el-form-item label="接入点">
                 <el-select
                   v-model="prop.connector"
                   filterable
-                  placeholder="选择连接器"
+                  placeholder="选择接入点"
                   class="w-full"
                   @change="loadOperations"
                 >
-                  <el-option
-                    v-for="c in connectors"
-                    :key="c.id"
-                    :label="`${c.name} (${c.code})`"
-                    :value="c.code"
-                  />
+                  <el-option-group
+                    v-for="g in connectorGroups"
+                    :key="g.name"
+                    :label="g.name"
+                  >
+                    <el-option
+                      v-for="c in g.items"
+                      :key="c.id"
+                      :label="`${c.name} (${c.code})`"
+                      :value="c.code"
+                    />
+                  </el-option-group>
                 </el-select>
+                <div class="mt-1 text-xs text-gray-400">
+                  按合作方分组；密钥在合作方，这里只决定调哪个地址
+                </div>
               </el-form-item>
               <el-form-item label="接口">
                 <el-select

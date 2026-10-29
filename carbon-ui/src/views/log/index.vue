@@ -11,11 +11,11 @@ import {
   type WriterStatus
 } from "@/api/log";
 import {
-  pageConnectors,
+  pageEndpoints,
   pageOperations,
-  type Connector,
+  type Endpoint,
   type Operation
-} from "@/api/connector";
+} from "@/api/endpoint";
 import { MAX_PAGE_SIZE, PAGE_SIZES, labelOf, tagOf } from "@/api/common";
 import { showError } from "@/utils/http";
 
@@ -27,7 +27,7 @@ const loading = ref(false);
 const rows = ref<Array<InvokeLog>>([]);
 const total = ref(0);
 
-const connectors = ref<Array<Connector>>([]);
+const connectors = ref<Array<Endpoint>>([]);
 const connectorNames = ref<Map<string, string>>(new Map());
 /** connectorId → (operationId → 名称)，按需加载后缓存 */
 const operationCache = new Map<string, Map<string, string>>();
@@ -48,7 +48,7 @@ const query = reactive({
 
 async function loadConnectors() {
   try {
-    const page = await pageConnectors({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
+    const page = await pageEndpoints({ pageNum: 1, pageSize: MAX_PAGE_SIZE });
     connectors.value = page.rows;
     connectorNames.value = new Map(page.rows.map(c => [c.id, c.name]));
   } catch (e) {
@@ -56,7 +56,7 @@ async function loadConnectors() {
   }
 }
 
-/** 选连接器后才有接口下拉；不选连接器就没法按接口筛（后端要求 operationId 独立生效） */
+/** 选接入点后才有接口下拉；不选接入点就没法按接口筛（后端要求 operationId 独立生效） */
 async function onConnectorChange(id?: string) {
   query.operationId = undefined;
   operationOptions.value = [];
@@ -74,9 +74,9 @@ async function onConnectorChange(id?: string) {
 }
 
 /**
- * 列表里要显示「连接器.接口」的名字，但日志表只存 id。
- * 做法：对当前页出现的连接器各拉一次接口列表（去重、并行、失败静默降级成 #id），
- * 结果进缓存，翻页时大部分连接器已经在缓存里了。
+ * 列表里要显示「接入点.接口」的名字，但日志表只存 id。
+ * 做法：对当前页出现的接入点各拉一次接口列表（去重、并行、失败静默降级成 #id），
+ * 结果进缓存，翻页时大部分接入点已经在缓存里了。
  */
 async function warmOperationNames(logs: Array<InvokeLog>) {
   const ids = [
@@ -251,7 +251,7 @@ onMounted(async () => {
       </el-select>
       <el-select
         v-model="query.connectorId"
-        placeholder="全部连接器"
+        placeholder="全部接入点"
         clearable
         filterable
         style="width: 180px"
@@ -313,7 +313,7 @@ onMounted(async () => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="连接器.接口" min-width="180">
+      <el-table-column label="接入点.接口" min-width="180">
         <template #default="{ row }">{{ target(row) }}</template>
       </el-table-column>
       <el-table-column prop="method" label="方法" width="80">
@@ -412,7 +412,7 @@ onMounted(async () => {
             <el-descriptions-item label="来源">
               {{ tagOf(LOG_SOURCES, summary.source).label }}
             </el-descriptions-item>
-            <el-descriptions-item label="连接器.接口">
+            <el-descriptions-item label="接入点.接口">
               {{ target(summary) }}
             </el-descriptions-item>
             <el-descriptions-item label="状态码">

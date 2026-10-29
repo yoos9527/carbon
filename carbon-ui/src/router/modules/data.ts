@@ -11,11 +11,28 @@ export default {
   },
   children: [
     {
-      path: "/connectors",
-      name: "ConnectorList",
-      component: () => import("@/views/connector/index.vue"),
+      path: "/partners",
+      name: "PartnerList",
+      component: () => import("@/views/partners/index.vue"),
       meta: {
-        title: "连接器"
+        title: "合作方"
+      }
+    },
+    {
+      path: "/partners/:partnerId/credentials",
+      name: "PartnerCredentialList",
+      component: () => import("@/views/partners/credentials.vue"),
+      meta: {
+        title: "凭证",
+        showLink: false
+      }
+    },
+    {
+      path: "/endpoints",
+      name: "EndpointList",
+      component: () => import("@/views/endpoints/index.vue"),
+      meta: {
+        title: "接入点"
       }
     },
     {

@@ -42,7 +42,7 @@ export interface StatsSourceMix {
 }
 
 export interface StatsTopSlow {
-  /** 雪花 id，字符串；调用未落连接器时为空 */
+  /** 雪花 id，字符串；调用未落接入点时为空 */
   connectorId?: string | null;
   operationId?: string | null;
   connectorName?: string | null;

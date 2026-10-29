@@ -16,7 +16,7 @@ export interface AppItem {
   appKey: string;
   /** 是否已设置密钥；密钥本身不可回读 */
   secretSet: boolean;
-  /** 允许调用的连接器 id；空 = 不限制 */
+  /** 允许调用的接入点 id；空 = 不限制 */
   allowedConnectors: Array<string>;
   rateLimitQps: number;
   /** IP / CIDR 白名单；空 = 不限制 */

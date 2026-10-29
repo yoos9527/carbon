@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import dayjs from "dayjs";
 import { LOG_SOURCES, pageLogs, type InvokeLog } from "@/api/log";
 import { loadOperationNameMap } from "@/api/service";
+import { credentialTypeLabel, partnerOptions, type Partner } from "@/api/partner";
 import { labelOf, tagOf } from "@/api/common";
 import { showError } from "@/utils/http";
 
@@ -15,6 +16,7 @@ const loading = ref(false);
 const rows = ref<Array<InvokeLog>>([]);
 const total = ref(0);
 const nameMap = ref(new Map<string, string>());
+const partnerMap = ref(new Map<string, string>());
 
 const query = reactive({
   pageNum: 1,
@@ -51,6 +53,24 @@ async function loadNames() {
   } catch {
     // 名称映射只是展示优化：拉不到就退回显示 id，不影响对账
   }
+  try {
+    const list: Array<Partner> = await partnerOptions();
+    const m = new Map<string, string>();
+    list.forEach(p => m.set(String(p.id), p.name));
+    partnerMap.value = m;
+  } catch {
+    // 同上：合作方名字不影响对账
+  }
+}
+
+function partnerName(row: InvokeLog) {
+  if (!row.partnerId) return "-";
+  return partnerMap.value.get(String(row.partnerId)) ?? `#${row.partnerId}`;
+}
+
+function credentialLabel(row: InvokeLog) {
+  if (!row.credentialType) return "不鉴权";
+  return credentialTypeLabel(row.credentialType);
 }
 
 function search() {
@@ -199,6 +219,16 @@ onMounted(async () => {
       </el-table-column>
       <el-table-column label="数据源服务接口" min-width="220">
         <template #default="{ row }">{{ serviceName(row) }}</template>
+      </el-table-column>
+      <el-table-column label="合作方" min-width="120">
+        <template #default="{ row }">{{ partnerName(row) }}</template>
+      </el-table-column>
+      <el-table-column label="凭证" width="130">
+        <template #default="{ row }">
+          <span :class="row.credentialType ? '' : 'text-gray-400'">
+            {{ credentialLabel(row) }}
+          </span>
+        </template>
       </el-table-column>
       <el-table-column label="来源" width="90">
         <template #default="{ row }">

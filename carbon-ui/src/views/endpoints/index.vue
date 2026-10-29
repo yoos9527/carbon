@@ -3,22 +3,27 @@ import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
-  AUTH_TYPES,
-  authTypeLabel,
-  copyConnector,
-  createConnector,
-  deleteConnectors,
-  pageConnectors,
-  updateConnectorStatus,
-  type Connector
-} from "@/api/connector";
+  copyEndpoint,
+  createEndpoint,
+  deleteEndpoints,
+  pageEndpoints,
+  updateEndpointStatus,
+  type Endpoint
+} from "@/api/endpoint";
+import { listCredentials, partnerOptions, type Partner } from "@/api/partner";
 import { showError } from "@/utils/http";
 
-defineOptions({ name: "ConnectorList" });
+defineOptions({ name: "EndpointList" });
 
+/**
+ * 接入点列表。
+ *
+ * 这一页刻意只剩「怎么连过去」：地址、公共头、超时。密钥不在这一层，
+ * 所以列里只有「凭证」一栏显示它最终会用哪一套，改密钥请去合作方。
+ */
 const router = useRouter();
 const loading = ref(false);
-const rows = ref<Array<Connector>>([]);
+const rows = ref<Array<Endpoint>>([]);
 const total = ref(0);
 
 const query = reactive({
@@ -26,20 +31,23 @@ const query = reactive({
   pageSize: 10,
   keyword: "",
   category: "",
-  status: undefined as number | undefined
+  status: undefined as number | undefined,
+  partnerId: undefined as string | undefined
 });
 
 const categories = ref<Array<string>>([]);
+const partners = ref<Array<Partner>>([]);
 
 async function load() {
   loading.value = true;
   try {
-    const page = await pageConnectors({
+    const page = await pageEndpoints({
       pageNum: query.pageNum,
       pageSize: query.pageSize,
       keyword: query.keyword || undefined,
       category: query.category || undefined,
-      status: query.status
+      status: query.status,
+      partnerId: query.partnerId || undefined
     });
     rows.value = page.rows;
     total.value = page.total;
@@ -54,6 +62,14 @@ async function load() {
   }
 }
 
+async function loadPartners() {
+  try {
+    partners.value = await partnerOptions();
+  } catch (e) {
+    showError(e);
+  }
+}
+
 function search() {
   query.pageNum = 1;
   load();
@@ -63,16 +79,17 @@ function reset() {
   query.keyword = "";
   query.category = "";
   query.status = undefined;
+  query.partnerId = undefined;
   search();
 }
 
 /** 启停用：乐观更新，失败回滚 */
-async function toggleStatus(row: Connector) {
+async function toggleStatus(row: Endpoint) {
   const next = row.status === 1 ? 0 : 1;
   const prev = row.status;
   row.status = next;
   try {
-    await updateConnectorStatus(row.id, next);
+    await updateEndpointStatus(row.id, next);
     ElMessage.success(next === 1 ? "已启用" : "已停用");
   } catch (e) {
     row.status = prev;
@@ -80,11 +97,11 @@ async function toggleStatus(row: Connector) {
   }
 }
 
-async function copy(row: Connector) {
+async function copy(row: Endpoint) {
   const count = row.operationCount ?? 0;
   try {
     await ElMessageBox.confirm(
-      `会连同鉴权配置${count > 0 ? `与 ${count} 个接口` : ""}一起复制，副本以「停用」状态创建（改完基址/环境再启用）。继续？`,
+      `会连同${count > 0 ? ` ${count} 个接口` : "接口配置"}一起复制，副本以「停用」状态创建（改完基址/环境再启用）。凭证不复制，副本沿用同一条。继续？`,
       `复制「${row.name}」`,
       { type: "info", confirmButtonText: "复制", cancelButtonText: "取消" }
     );
@@ -92,7 +109,7 @@ async function copy(row: Connector) {
     return;
   }
   try {
-    await copyConnector(row.id);
+    await copyEndpoint(row.id);
     ElMessage.success("已复制，副本处于停用状态");
     load();
   } catch (e) {
@@ -100,21 +117,21 @@ async function copy(row: Connector) {
   }
 }
 
-async function remove(row: Connector) {
+async function remove(row: Endpoint) {
   const count = row.operationCount ?? 0;
   try {
     await ElMessageBox.confirm(
       count > 0
         ? `「${row.name}」下的 ${count} 个接口会一起删除，调用它的编排将失效。确定删除？`
         : `确定删除「${row.name}」？`,
-      "删除连接器",
+      "删除接入点",
       { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
     );
   } catch {
     return;
   }
   try {
-    await deleteConnectors([row.id]);
+    await deleteEndpoints([row.id]);
     ElMessage.success("已删除");
     load();
   } catch (e) {
@@ -125,25 +142,48 @@ async function remove(row: Connector) {
 /* ---------------- 新建 ---------------- */
 const dialog = reactive({ visible: false, saving: false });
 const form = reactive({
+  partnerId: "",
+  credentialId: "",
   code: "",
   name: "",
   category: "",
   baseUrl: "",
-  authType: "none",
   timeoutMs: 10000,
   remark: ""
 });
+const formCredentials = ref<Array<{ id: string; name: string; type: string }>>(
+  []
+);
+
+async function loadFormCredentials(partnerId: string) {
+  formCredentials.value = [];
+  form.credentialId = "";
+  if (!partnerId) return;
+  try {
+    const list = await listCredentials(partnerId);
+    formCredentials.value = list.map(i => ({
+      id: i.id,
+      name: i.name,
+      type: i.type
+    }));
+  } catch (e) {
+    showError(e);
+  }
+}
 
 function openCreate() {
   Object.assign(form, {
+    partnerId: query.partnerId ?? "",
+    credentialId: "",
     code: "",
     name: "",
     category: "",
     baseUrl: "",
-    authType: "none",
     timeoutMs: 10000,
     remark: ""
   });
+  formCredentials.value = [];
+  if (form.partnerId) loadFormCredentials(form.partnerId);
   dialog.visible = true;
 }
 
@@ -152,9 +192,16 @@ async function save() {
     ElMessage.warning("编码、名称、Base URL 必填");
     return;
   }
+  if (!form.partnerId) {
+    ElMessage.warning("必须选择所属合作方");
+    return;
+  }
   dialog.saving = true;
   try {
-    await createConnector({ ...form });
+    await createEndpoint({
+      ...form,
+      credentialId: form.credentialId || undefined
+    });
     ElMessage.success("已创建");
     dialog.visible = false;
     load();
@@ -165,7 +212,10 @@ async function save() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  loadPartners();
+  load();
+});
 </script>
 
 <template>
@@ -179,6 +229,20 @@ onMounted(load);
         @keyup.enter="search"
         @clear="search"
       />
+      <el-select
+        v-model="query.partnerId"
+        placeholder="全部合作方"
+        clearable
+        style="width: 170px"
+        @change="search"
+      >
+        <el-option
+          v-for="p in partners"
+          :key="p.id"
+          :label="p.name"
+          :value="p.id"
+        />
+      </el-select>
       <el-select
         v-model="query.category"
         placeholder="全部分组"
@@ -201,7 +265,7 @@ onMounted(load);
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="reset">重置</el-button>
       <div class="flex-1" />
-      <el-button type="primary" @click="openCreate">新建连接器</el-button>
+      <el-button type="primary" @click="openCreate">新建接入点</el-button>
     </div>
 
     <el-table v-loading="loading" :data="rows" border stripe>
@@ -211,7 +275,18 @@ onMounted(load);
           <span class="font-mono text-xs">{{ row.code }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分组" width="100">
+      <el-table-column label="合作方" min-width="130">
+        <template #default="{ row }">
+          <el-button
+            link
+            type="primary"
+            @click="router.push(`/partners?focus=${row.partnerId}`)"
+          >
+            {{ row.partnerName || "-" }}
+          </el-button>
+        </template>
+      </el-table-column>
+      <el-table-column prop="category" label="分组" width="90">
         <template #default="{ row }">{{ row.category || "-" }}</template>
       </el-table-column>
       <el-table-column prop="baseUrl" label="Base URL" min-width="200">
@@ -219,11 +294,12 @@ onMounted(load);
           <span class="font-mono text-xs">{{ row.baseUrl }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="鉴权" width="120">
+      <el-table-column label="凭证" width="140">
         <template #default="{ row }">
-          <el-tag size="small" effect="plain">
-            {{ authTypeLabel(row.authType) }}
+          <el-tag v-if="row.credentialName" size="small" effect="plain">
+            {{ row.credentialName }}
           </el-tag>
+          <span v-else class="text-xs text-gray-400">合作方默认</span>
         </template>
       </el-table-column>
       <el-table-column prop="operationCount" label="接口数" width="80" />
@@ -235,8 +311,8 @@ onMounted(load);
           />
         </template>
       </el-table-column>
-      <el-table-column prop="updatedAt" label="更新时间" width="180" />
-      <el-table-column label="操作" width="230" fixed="right">
+      <el-table-column prop="updatedAt" label="更新时间" width="170" />
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button
             link
@@ -252,9 +328,12 @@ onMounted(load);
       <template #empty>
         <el-empty
           :description="
-            query.keyword || query.category || query.status !== undefined
+            query.keyword ||
+            query.category ||
+            query.partnerId ||
+            query.status !== undefined
               ? '筛选无结果，试试重置条件'
-              : '还没有连接器，点右上角新建一个'
+              : '还没有接入点，先建合作方，再给它配一个接入点'
           "
         />
       </template>
@@ -272,19 +351,37 @@ onMounted(load);
       />
     </div>
 
-    <el-dialog v-model="dialog.visible" title="新建连接器" width="560px">
-      <el-form :model="form" label-width="100px">
+    <el-dialog v-model="dialog.visible" title="新建接入点" width="600px">
+      <el-form :model="form" label-width="110px">
+        <el-form-item label="合作方" required>
+          <el-select
+            v-model="form.partnerId"
+            placeholder="选择合作方"
+            style="width: 100%"
+            @change="loadFormCredentials"
+          >
+            <el-option
+              v-for="p in partners"
+              :key="p.id"
+              :label="`${p.name}（${p.code}）`"
+              :value="p.id"
+            />
+          </el-select>
+          <div class="mt-1 text-xs text-gray-400">
+            合作方不存在？先到「合作方」页建一家
+          </div>
+        </el-form-item>
         <el-form-item label="编码" required>
           <el-input
             v-model="form.code"
-            placeholder="英文/数字/下划线/短横线，如 crm"
+            placeholder="英文/数字/下划线/短横线，如 qcc"
           />
         </el-form-item>
         <el-form-item label="名称" required>
-          <el-input v-model="form.name" placeholder="如 客户中心" />
+          <el-input v-model="form.name" placeholder="如 企查查-企业风控" />
         </el-form-item>
         <el-form-item label="分组">
-          <el-input v-model="form.category" placeholder="如 CRM" />
+          <el-input v-model="form.category" placeholder="如 工商信息" />
         </el-form-item>
         <el-form-item label="Base URL" required>
           <el-input
@@ -292,19 +389,20 @@ onMounted(load);
             placeholder="https://{{env.host}} 或 https://api.example.com"
           />
         </el-form-item>
-        <el-form-item label="鉴权类型">
-          <el-select v-model="form.authType" style="width: 100%">
+        <el-form-item label="默认凭证">
+          <el-select
+            v-model="form.credentialId"
+            placeholder="留空则用合作方默认凭证"
+            clearable
+            style="width: 100%"
+          >
             <el-option
-              v-for="t in AUTH_TYPES"
-              :key="t.value"
-              :label="t.label"
-              :value="t.value"
+              v-for="c in formCredentials"
+              :key="c.id"
+              :label="`${c.name}（${c.type}）`"
+              :value="c.id"
             />
           </el-select>
-          <div class="mt-1 text-xs text-gray-400">
-            鉴权参数（API
-            Key/密码等）保存后在详情页配置，密钥入库加密、只回显掩码
-          </div>
         </el-form-item>
         <el-form-item label="超时(ms)">
           <el-input-number v-model="form.timeoutMs" :min="1000" :step="1000" />

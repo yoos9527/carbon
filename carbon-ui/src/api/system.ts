@@ -9,7 +9,7 @@ import type { PageQuery } from "@/api/common";
  */
 export interface OperLog {
   id: string;
-  /** 业务模块，如「流程」「连接器」 */
+  /** 业务模块，如「流程」「接入点」 */
   title: string;
   businessType?: string;
   /** 后端方法全名，排障时看它 */
