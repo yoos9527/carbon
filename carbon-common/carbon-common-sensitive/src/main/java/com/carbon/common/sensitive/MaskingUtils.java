@@ -40,6 +40,16 @@ public final class MaskingUtils {
             "apikey", "api-key", "api_key", "accesskey", "access-key", "access_key",
             "credential", "signature", "sign", "nonce", "sessionid", "session-id");
 
+    /**
+     * 键名白名单：先查这里，命中即不脱敏。
+     *
+     * <p>存在的理由：黑名单是子串匹配，`credential` 会连带命中 `credentialMode` / `credentialId` /
+     * `credentialType` 这类**非密态**字段。这三个字段恰恰是排查「这次调用用了哪条凭证、走的哪种模式」
+     * 的唯一线索，被达成 `******` 等于操作日志白记。白名单排在黑名单之后生效（即白名单优先）。
+     */
+    private static final Set<String> NON_SENSITIVE_KEYS = Set.of(
+            "credentialmode", "credentialid", "credentialtype", "credentialcount");
+
     /** 值太短时不脱敏——把 "1" 打成 "******" 只会让人以为配置错了 */
     private static final int MIN_MASK_LENGTH = 6;
 
@@ -51,6 +61,9 @@ public final class MaskingUtils {
             return false;
         }
         String lower = key.toLowerCase(Locale.ROOT);
+        if (NON_SENSITIVE_KEYS.contains(lower)) {
+            return false;
+        }
         if (SENSITIVE_KEYWORDS.contains(lower)) {
             return true;
         }

@@ -93,4 +93,19 @@ class MaskingUtilsTest {
         assertThat(MaskingUtils.maskJson("{not json", MaskingUtils.CREDENTIAL_CONTAINER_KEYS))
                 .isEqualTo("{not json");
     }
+
+    @Test
+    @DisplayName("credentialMode/credentialId/credentialType 不打码——黑名单子串 credential 会误伤，审计需要它们")
+    void credentialMetaKeysStayReadable() {
+        String json = """
+                {"credentialMode":"OVERRIDE","credentialId":"2115008092107268098","credentialType":"api_key","config":{"value":"super-secret-value"}}
+                """;
+
+        String masked = MaskingUtils.maskJson(json, MaskingUtils.CREDENTIAL_CONTAINER_KEYS);
+
+        assertThat(masked).contains("\"credentialMode\":\"OVERRIDE\"");
+        assertThat(masked).contains("\"credentialId\":\"2115008092107268098\"");
+        assertThat(masked).contains("\"credentialType\":\"api_key\"");
+        assertThat(masked).doesNotContain("super-secret-value");
+    }
 }
